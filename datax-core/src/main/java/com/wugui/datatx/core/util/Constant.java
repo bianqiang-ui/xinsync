@@ -1,4 +1,4 @@
-package com.wugui.datax.admin.util;
+package com.wugui.datatx.core.util;
 
 public final class Constant {
 
