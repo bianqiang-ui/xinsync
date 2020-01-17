@@ -12,16 +12,16 @@ import java.util.List;
 
 @RunWith(SpringRunner.class)
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
-public class XxlJobGroupMapperTest {
+public class JobGroupMapperTest {
 
     @Resource
-    private JobGroupMapper xxlJobGroupMapper;
+    private JobGroupMapper jobGroupMapper;
 
     @Test
     public void test(){
-        List<JobGroup> list = xxlJobGroupMapper.findAll();
+        List<JobGroup> list = jobGroupMapper.findAll();
 
-        List<JobGroup> list2 = xxlJobGroupMapper.findByAddressType(0);
+        List<JobGroup> list2 = jobGroupMapper.findByAddressType(0);
 
         JobGroup group = new JobGroup();
         group.setAppName("setAppName");
@@ -30,18 +30,18 @@ public class XxlJobGroupMapperTest {
         group.setAddressType(0);
         group.setAddressList("setAddressList");
 
-        int ret = xxlJobGroupMapper.save(group);
+        int ret = jobGroupMapper.save(group);
 
-        JobGroup group2 = xxlJobGroupMapper.load(group.getId());
+        JobGroup group2 = jobGroupMapper.load(group.getId());
         group2.setAppName("setAppName2");
         group2.setTitle("setTitle2");
         group2.setOrder(2);
         group2.setAddressType(2);
         group2.setAddressList("setAddressList2");
 
-        int ret2 = xxlJobGroupMapper.update(group2);
+        int ret2 = jobGroupMapper.update(group2);
 
-        int ret3 = xxlJobGroupMapper.remove(group.getId());
+        int ret3 = jobGroupMapper.remove(group.getId());
     }
 
 }
