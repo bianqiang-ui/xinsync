@@ -13,10 +13,10 @@ import java.util.List;
 
 @RunWith(SpringRunner.class)
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
-public class XxlJobLogGlueMapperTest {
+public class JobLogGlueMapperTest {
 
     @Resource
-    private JobLogGlueMapper xxlJobLogGlueMapper;
+    private JobLogGlueMapper jobLogGlueMapper;
 
     @Test
     public void test(){
@@ -28,13 +28,13 @@ public class XxlJobLogGlueMapperTest {
 
         logGlue.setAddTime(new Date());
         logGlue.setUpdateTime(new Date());
-        int ret = xxlJobLogGlueMapper.save(logGlue);
+        int ret = jobLogGlueMapper.save(logGlue);
 
-        List<JobLogGlue> list = xxlJobLogGlueMapper.findByJobId(1);
+        List<JobLogGlue> list = jobLogGlueMapper.findByJobId(1);
 
-        int ret2 = xxlJobLogGlueMapper.removeOld(1, 1);
+        int ret2 = jobLogGlueMapper.removeOld(1, 1);
 
-        int ret3 = xxlJobLogGlueMapper.deleteByJobId(1);
+        int ret3 = jobLogGlueMapper.deleteByJobId(1);
     }
 
 }

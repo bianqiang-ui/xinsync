@@ -14,21 +14,21 @@ import java.util.List;
 
 @RunWith(SpringRunner.class)
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
-public class XxlJobRegistryMapperTest {
+public class JobRegistryMapperTest {
 
     @Resource
-    private JobRegistryMapper xxlJobRegistryMapper;
+    private JobRegistryMapper jobRegistryMapper;
 
     @Test
     public void test(){
-        int ret = xxlJobRegistryMapper.registryUpdate("g1", "k1", "v1", new Date());
+        int ret = jobRegistryMapper.registryUpdate("g1", "k1", "v1", new Date());
         if (ret < 1) {
-            ret = xxlJobRegistryMapper.registrySave("g1", "k1", "v1", new Date());
+            ret = jobRegistryMapper.registrySave("g1", "k1", "v1", new Date());
         }
 
-        List<JobRegistry> list = xxlJobRegistryMapper.findAll(1, new Date());
+        List<JobRegistry> list = jobRegistryMapper.findAll(1, new Date());
 
-        int ret2 = xxlJobRegistryMapper.removeDead(Arrays.asList(1));
+        int ret2 = jobRegistryMapper.removeDead(Arrays.asList(1));
     }
 
 }
