@@ -95,8 +95,7 @@ if [[ ! ${EXECUTOR_PORT} ]]; then
 fi
 
 if [[ ! ${DATAX_ADMIN_PORT} ]]; then
-   # env.properties 里 DATAX_ADMIN_PORT 出厂就是空值，所以这一行是打包部署真正生效的分支：
-   # 必须等于 admin 的端口（9527），否则执行器注册全部打到不存在的端口上。
+   # env.properties 里这项出厂就是空值，所以这行是打包部署唯一生效的分支，必须等于 admin 的端口
    DATAX_ADMIN_PORT=9527
 fi
 

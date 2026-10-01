@@ -86,9 +86,7 @@ if [[ ! ${MAIL_PASSWORD} ]]; then
 fi
 
 if [[ ! ${SERVER_PORT} ]]; then
-   # 只有 env.properties 里 SERVER_PORT 被留空时才会走到这里。
-   # 必须与 datax-admin/src/main/bin/env.properties 和 conf/application.yml 保持同一个值（9527），
-   # 否则"删掉配置里的端口"和"保留配置里的端口"会起在不同端口上。
+   # 仅当 env.properties 把 SERVER_PORT 留空时才走到这里；值必须与 env.properties、conf/application.yml 同值
    SERVER_PORT=9527
 fi
 
