@@ -1,9 +1,6 @@
 # web port
 server:
-  # 不要写成 ${server.port:...}：属性名与占位符同名会触发 Circular placeholder reference。
-  # 这里必须与 bin/env.properties 的 SERVER_PORT（启动脚本用 -Dserver.port 覆盖）以及
-  # datax-executor 的 datax.admin.port 保持同一个值，默认 9527（见 doc/datax-web/datax-web-deploy.md）。
-  # 需要改端口时用 -Dserver.port=xxxx 或改 env.properties。
+  # 不能写成 ${server.port:...}（同名自引用会 Circular placeholder reference）；值须与 bin/env.properties 的 SERVER_PORT 一致
   port: 9527
 spring:
   #数据源

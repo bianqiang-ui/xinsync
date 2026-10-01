@@ -1,7 +1,6 @@
 # web port
 server:
-  # 不要写成 ${server.port:...}（同名自引用会 Circular placeholder reference）；
-  # 这里是"脱离启动脚本裸跑"时的兜底，打包部署由 env.properties 的 SERVER_PORT=9504 经 -Dserver.port 覆盖
+  # 不能写成 ${server.port:...}（同名自引用会 Circular placeholder reference）；值须与 bin/env.properties 的 SERVER_PORT 一致
   port: 9504
 
 # log config
@@ -15,8 +14,7 @@ datax:
     admin:
       ### datax admin address list, such as "http://address" or "http://address01,http://address02"
       #addresses: http://127.0.0.1:9527
-      # 9527 = admin 默认端口（doc/datax-web/datax-web-deploy.md）；打包部署时启动脚本以
-      # -Ddatax.admin.port 覆盖（env.properties 的 DATAX_ADMIN_PORT 出厂为空，走脚本兜底 9527）
+      # 9527 = admin 默认端口；打包部署由启动脚本的 -Ddatax.admin.port 覆盖（env.properties 该项出厂为空，走脚本兜底）
       addresses: http://127.0.0.1:${datax.admin.port:9527}
     executor:
       appname: datax-executor
