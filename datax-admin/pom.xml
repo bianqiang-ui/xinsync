@@ -46,6 +46,22 @@
                 <version>${log4j2.version}</version>
             </dependency>
 
+            <!--
+              logback-classic 被显式提到 1.2.13，但 logback-core 仍被导入的 Boot BOM 管到 1.2.9，
+              两者版本错开会在运行期抛 NoSuchMethodError: OptionHelper.isNotEmtpy（编译期看不出来，
+              实测 admin 直接起不来）。core 必须跟着一起钉住。
+            -->
+            <dependency>
+                <groupId>ch.qos.logback</groupId>
+                <artifactId>logback-classic</artifactId>
+                <version>${logback-classic.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>ch.qos.logback</groupId>
+                <artifactId>logback-core</artifactId>
+                <version>${logback-classic.version}</version>
+            </dependency>
+
             <dependency>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-starter-parent</artifactId>

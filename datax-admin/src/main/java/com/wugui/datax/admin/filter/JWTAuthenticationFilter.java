@@ -67,7 +67,9 @@ public class JWTAuthenticationFilter extends UsernamePasswordAuthenticationFilte
                                             Authentication authResult) throws IOException {
 
         JwtUser jwtUser = (JwtUser) authResult.getPrincipal();
-        boolean isRemember = rememberMe.get() == 1;
+        // rememberMe 是可选字段，前端不传时为 null，直接拆箱会 NPE（实测登录返回 403 空响应）
+        Integer rememberMeFlag = rememberMe.get();
+        boolean isRemember = rememberMeFlag != null && rememberMeFlag == 1;
 
         String role = "";
         Collection<? extends GrantedAuthority> authorities = jwtUser.getAuthorities();

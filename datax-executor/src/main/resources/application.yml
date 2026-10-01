@@ -1,7 +1,8 @@
 # web port
 server:
-  # 不要与 admin 的 8080 相同，同机部署会端口冲突
-  port: ${server.port:8092}
+  # 不要写成 ${server.port:...}（同名自引用会 Circular placeholder reference）；
+  # 改端口用 -Dserver.port=xxxx。执行器与 admin 同机部署时不能都是 8080。
+  port: 8092
 
 # log config
 logging:
