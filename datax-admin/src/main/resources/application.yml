@@ -1,7 +1,8 @@
 # web port
 server:
-  #port: 8080
-  port: ${server.port:8080}
+  # 直接写值，不要写成 ${server.port:...}：属性名与占位符同名会触发 Circular placeholder reference。
+  # 需要改端口时用 -Dserver.port=xxxx 或环境变量 SERVER_PORT 覆盖即可。
+  port: 8080
 spring:
   #数据源
   datasource:

@@ -12,7 +12,6 @@ public class WhitelistSerializerFactory extends SerializerFactory {
     public static final WhitelistSerializerFactory INSTANCE = new WhitelistSerializerFactory();
 
     private static final String[] ALLOWED_PREFIXES = {
-            "[",
             "boolean", "byte", "char", "short", "int", "long", "float", "double", "void",
             "com.wugui.",
             "java.lang.Boolean", "java.lang.Byte", "java.lang.Character", "java.lang.Short",
@@ -20,6 +19,11 @@ public class WhitelistSerializerFactory extends SerializerFactory {
             "java.lang.String", "java.lang.Number", "java.lang.Enum", "java.lang.StackTraceElement",
             "java.lang.Object", "java.util.", "java.math.", "java.time.", "java.sql.",
     };
+
+    /**
+     * JVM 数组元素描述符里的基本类型（Z=boolean B=byte C=char S=short I=int J=long F=float D=double）。
+     */
+    private static final String PRIMITIVE_DESCRIPTORS = "ZBCSIJFD";
 
     private static final String[] DENIED_PREFIXES = {
             "java.lang.Runtime", "java.lang.ProcessBuilder", "java.lang.Thread",
@@ -34,15 +38,38 @@ public class WhitelistSerializerFactory extends SerializerFactory {
 
     @Override
     public Deserializer getDeserializer(String type) throws HessianProtocolException {
-        if (!isAllowed(type)) {
+        String canonical = canonicalize(type);
+        if (!isAllowed(canonical)) {
             throw new HessianProtocolException("deserialization of '" + type + "' is not allowed");
         }
         return super.getDeserializer(type);
     }
 
+    /**
+     * 把 {@code [Ljava.lang.String;}、{@code Ljava.lang.String;} 这类 JVM 描述符
+     * 归一成可直接比对的全限定类名；hessian 解析数组时会用元素描述符回调进来。
+     */
+    private static String canonicalize(String type) {
+        if (type == null) {
+            return null;
+        }
+        String result = type;
+        while (result.startsWith("[")) {
+            result = result.substring(1);
+        }
+        if (result.startsWith("L") && result.endsWith(";") && result.length() > 2) {
+            result = result.substring(1, result.length() - 1);
+        }
+        return result;
+    }
+
     private static boolean isAllowed(String type) {
         if (type == null || type.length() == 0) {
             return false;
+        }
+        // 基本类型数组（如 [I、[[D）归一后只剩单个描述符字符
+        if (type.length() == 1 && PRIMITIVE_DESCRIPTORS.indexOf(type.charAt(0)) >= 0) {
+            return true;
         }
         for (String denied : DENIED_PREFIXES) {
             if (type.startsWith(denied)) {
