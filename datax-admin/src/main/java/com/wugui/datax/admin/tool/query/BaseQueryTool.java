@@ -43,6 +43,11 @@ public abstract class BaseQueryTool implements QueryToolInterface {
      */
     private static final String IDENTIFIER_RULE = "^[A-Za-z0-9_$#.]{1,128}$";
 
+    /**
+     * Hive 各版本都支持、且不会拉起 MapReduce/Tez 作业的探活语句
+     */
+    private static final String HIVE_VALIDATION_QUERY = "SHOW DATABASES";
+
     static String checkIdentifier(String name, String desc) {
         if (StringUtils.isBlank(name)) {
             throw new IllegalArgumentException(desc + "不能为空");
@@ -84,7 +89,7 @@ public abstract class BaseQueryTool implements QueryToolInterface {
             getDataSource(jobDatasource);
         } else {
             this.connection = (Connection) LocalCacheUtil.get(jobDatasource.getDatasourceName());
-            if (!this.connection.isValid(500)) {
+            if (!isConnectionAlive(this.connection)) {
                 LocalCacheUtil.remove(jobDatasource.getDatasourceName());
                 getDataSource(jobDatasource);
             }
@@ -93,6 +98,19 @@ public abstract class BaseQueryTool implements QueryToolInterface {
         currentSchema = getSchema(jobDatasource.getJdbcUsername());
         currentDatabase = jobDatasource.getDatasource();
         LocalCacheUtil.set(jobDatasource.getDatasourceName(), this.connection, 4 * 60 * 60 * 1000);
+    }
+
+    /**
+     * 部分驱动（hive-jdbc 连旧版 HiveServer2）的 isValid() 会抛异常而不是返回 false，
+     * 这里把"校验失败"和"驱动不支持该校验"统一当作连接不可用，避免整个构造流程被带崩。
+     */
+    private static boolean isConnectionAlive(Connection conn) {
+        try {
+            return conn.isValid(500);
+        } catch (SQLException e) {
+            logger.warn("[isValid Exception] 连接校验失败，按不可用处理：{}", e.getMessage());
+            return false;
+        }
     }
 
     private void getDataSource(JobDatasource jobDatasource) throws SQLException {
@@ -107,6 +125,12 @@ public abstract class BaseQueryTool implements QueryToolInterface {
         dataSource.setMaximumPoolSize(1);
         dataSource.setMinimumIdle(0);
         dataSource.setConnectionTimeout(30000);
+        // HikariCP 默认用 Connection.isValid() 做连接校验；hive-jdbc 的 isValid() 内部会发
+        // Thrift GetInfo RPC，旧版 HiveServer2（1.1.x / CDH5）未实现该接口，于是每次取连接都抛
+        // "Method not supported"（Issue #296）。显式给一条各 Hive 版本都支持、且不触发计算引擎的语句。
+        if (JdbcConstants.HIVE.equalsIgnoreCase(jobDatasource.getDatasource())) {
+            dataSource.setConnectionTestQuery(HIVE_VALIDATION_QUERY);
+        }
         this.datasource = dataSource;
         this.connection = this.datasource.getConnection();
     }
@@ -413,10 +437,32 @@ public abstract class BaseQueryTool implements QueryToolInterface {
                 return true;
             }
         } catch (SQLException e) {
-            logger.error("[dataSourceTest Exception] --> "
-                    + "the exception message is:" + e.getMessage());
+            // hive-jdbc 对旧版 HiveServer2 取不到 DatabaseMetaData（GetInfo 未实现），降级用语句探活
+            logger.warn("[dataSourceTest] getDatabaseProductName 失败，降级为执行探活语句：{}", e.getMessage());
         }
-        return false;
+        return probeWithSql();
+    }
+
+    /**
+     * 执行该库类型自带的"列表"语句来确认连接可用（Hive 为 show tables），
+     * 只在 DatabaseMetaData 不可用时作为兜底。
+     */
+    private boolean probeWithSql() {
+        String probeSql = sqlBuilder == null ? null : sqlBuilder.getSQLQueryTables();
+        if (StringUtils.isBlank(probeSql)) {
+            return false;
+        }
+        Statement stmt = null;
+        try {
+            stmt = connection.createStatement();
+            stmt.execute(probeSql);
+            return true;
+        } catch (SQLException e) {
+            logger.error("[probeWithSql Exception] --> the exception message is:" + e.getMessage());
+            return false;
+        } finally {
+            JdbcUtils.close(stmt);
+        }
     }
 
 
