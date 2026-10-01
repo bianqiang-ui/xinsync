@@ -51,6 +51,10 @@ public interface JdbcConstants {
     String MARIADB                    = "mariadb";
     String MARIADB_DRIVER             = "org.mariadb.jdbc.Driver";
 
+    // TDSQL MySQL 版：走 MySQL 协议（连 proxy），元数据/插件复用 mysql 一侧，
+    // 独立成类型是为了挂分库分表语义（分片键、物理库展开），不污染 mysql 类型的既有用户
+    String TDSQL                      = "tdsql";
+
     String DERBY                      = "derby";
 
     String HBASE                      = "hbase";
