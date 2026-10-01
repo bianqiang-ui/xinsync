@@ -10,7 +10,7 @@ public class DataxJsonHelperTest {
         readerDatasource.setJdbcUsername("root");
         readerDatasource.setJdbcPassword("root");
         readerDatasource.setJdbcUrl("jdbc:mysql://localhost:3306/datax_web?serverTimezone=Asia/Shanghai&useLegacyDatetimeCode=false&useSSL=false&nullNamePatternMatchesAll=true&useUnicode=true&characterEncoding=UTF-8");
-        readerDatasource.setJdbcDriverClass("com.mysql.jdbc.Driver");
+        readerDatasource.setJdbcDriverClass("com.mysql.cj.jdbc.Driver");
         return readerDatasource;
     }
 
@@ -20,7 +20,7 @@ public class DataxJsonHelperTest {
         writerDatasource.setJdbcUsername("root");
         writerDatasource.setJdbcPassword("root");
         writerDatasource.setJdbcUrl("jdbc:mysql://localhost:3306/datax_web_demo?serverTimezone=Asia/Shanghai&useLegacyDatetimeCode=false&useSSL=false&nullNamePatternMatchesAll=true&useUnicode=true&characterEncoding=UTF-8");
-        writerDatasource.setJdbcDriverClass("com.mysql.jdbc.Driver");
+        writerDatasource.setJdbcDriverClass("com.mysql.cj.jdbc.Driver");
         return writerDatasource;
     }
 

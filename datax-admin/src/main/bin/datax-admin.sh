@@ -86,7 +86,8 @@ if [[ ! ${MAIL_PASSWORD} ]]; then
 fi
 
 if [[ ! ${SERVER_PORT} ]]; then
-   SERVER_PORT=9004
+   # admin 对外服务端口（Web UI + API），要与执行器配置里的 datax.admin.port 保持一致
+   SERVER_PORT=8080
 fi
 
 if [[ ! ${JAVA_OPTS} ]]; then

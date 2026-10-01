@@ -1,6 +1,7 @@
+# web port
 server:
   #port: 8080
-  port: ${server.port}
+  port: ${server.port:8080}
 spring:
   #数据源
   datasource:
@@ -10,7 +11,7 @@ spring:
     password: ${DB_PASSWORD:password}
     username: ${DB_USERNAME:username}
     url: jdbc:mysql://${DB_HOST:127.0.0.1}:${DB_PORT:3306}/${DB_DATABASE:dataxweb}?serverTimezone=Asia/Shanghai&useLegacyDatetimeCode=false&useSSL=false&nullNamePatternMatchesAll=true&useUnicode=true&characterEncoding=UTF-8
-    driver-class-name: com.mysql.jdbc.Driver
+    driver-class-name: com.mysql.cj.jdbc.Driver
 
 
     hikari:
@@ -32,8 +33,8 @@ spring:
     port: 25
     #username: xxx@qq.com
     #password: xxx
-    username: ${mail.username}
-    password: ${mail.password}
+    username: ${mail.username:}
+    password: ${mail.password:}
     properties:
       mail:
         smtp:
@@ -83,19 +84,24 @@ mybatis-plus:
 
 # 配置mybatis-plus打印sql日志
 logging:
+  config: classpath:logback.xml
   #level:
   #  com.wugui.datax.admin.mapper: info
-#path: ./data/applogs/admin
+  #path: ./data/applogs/admin
   level:
     com.wugui.datax.admin.mapper: error
-    path: ${data.path}/applogs/admin
+  path: ${data.path:./data}/applogs/admin
 
 
 
 #datax-job, access token
 datax:
   job:
-    accessToken:
+    # SECURITY: never leave empty in production; set DATAX_ACCESS_TOKEN env or override via properties.
+    # An empty token means /api/callback|registry|processCallback are effectively UNAUTHENTICATED.
+    accessToken: ${DATAX_ACCESS_TOKEN:}
+    # 兼容旧部署：仅在设为 true 时，accessToken 为空的回调才允许匿名通过
+    allowEmptyAccessToken: ${DATAX_ALLOW_EMPTY_ACCESS_TOKEN:false}
     #i18n (default empty as chinese, "en" as english)
     i18n:
     ## triggerpool max size
@@ -107,6 +113,21 @@ datax:
       ### log retention days
     logretentiondays: 30
 
+  # admin 侧安全策略
+  security:
+    # 允许跨域访问接口的前端来源，多个用逗号分隔；保持 "*" 时不会下发 allow-credentials
+    corsAllowedOrigins: ${DATAX_CORS_ALLOWED_ORIGINS:*}
+    # 是否匿名开放 swagger 文档（doc.html）；生产环境保持 false
+    swaggerAnonymous: ${DATAX_SWAGGER_ANONYMOUS:false}
+
+  # JWT 登录令牌签名密钥
+  jwt:
+    # SECURITY: 生产环境必须设置 DATAX_JWT_SECRET（>=32 位随机串）。
+    # 未设置时进程启动会随机生成密钥，重启后所有已签发 token 失效，多实例部署务必配置为统一值。
+    secret: ${DATAX_JWT_SECRET:}
+
 datasource:
   aes:
-    key: AD42F6697B035B75
+    # 数据源账号密码的落库加密密钥；发行版默认值 AD42F6697B035B75 会被启动日志判定为不安全并要求替换
+    # 注意：换 key 之前用旧 key 加密入库的数据源密码将无法解密，必须在新 key 下重新录入数据源
+    key: ${DATAX_AES_KEY:AD42F6697B035B75}

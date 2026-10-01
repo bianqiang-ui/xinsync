@@ -30,16 +30,23 @@ public class BuildCommand {
      * @param tgParam
      * @param tmpFilePath
      * @param dataXPyPath
+     * @param pythonPath python 解释器，为空时退回历史上的写死值 "python"
      * @return
      */
-    public static String[] buildDataXExecutorCmd(TriggerParam tgParam, String tmpFilePath, String dataXPyPath) {
+    public static String[] buildDataXExecutorCmd(TriggerParam tgParam, String tmpFilePath, String dataXPyPath, String pythonPath) {
         // command process
         //"--loglevel=debug"
         List<String> cmdArr = new ArrayList<>();
-        cmdArr.add("python");
+        cmdArr.add(StringUtils.isBlank(pythonPath) ? "python" : pythonPath.trim());
         String dataXHomePath = SystemUtils.getDataXHomePath();
         if (StringUtils.isNotEmpty(dataXHomePath)) {
             dataXPyPath = dataXHomePath.contains("bin") ? dataXHomePath + DEFAULT_DATAX_PY : dataXHomePath + "bin" + File.separator + DEFAULT_DATAX_PY;
+        }
+        if (StringUtils.isBlank(dataXPyPath)) {
+            throw new IllegalStateException("未找到 datax.py：请配置 DATAX_HOME 环境变量，或修正 datax-executor 配置项 datax.pypath");
+        }
+        if (!new File(dataXPyPath).isFile()) {
+            throw new IllegalStateException("datax.py 文件不存在：" + dataXPyPath);
         }
         cmdArr.add(dataXPyPath);
         String doc = buildDataXParam(tgParam);

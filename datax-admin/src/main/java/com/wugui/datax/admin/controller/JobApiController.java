@@ -27,6 +27,25 @@ public class JobApiController {
     private AdminBiz adminBiz;
 
     /**
+     * 校验 executor 回调令牌：未配置令牌时默认拒绝，避免 /api/** 成为匿名入口。
+     *
+     * @return null 表示校验通过
+     */
+    private ReturnT<String> validAccessToken(HttpServletRequest request) {
+        String accessToken = JobAdminConfig.getAdminConfig().getAccessToken();
+        if (accessToken == null || accessToken.trim().length() == 0) {
+            if (JobAdminConfig.getAdminConfig().isAllowEmptyAccessToken()) {
+                return null;
+            }
+            return new ReturnT<String>(ReturnT.FAIL_CODE, "The access token is not configured on admin side.");
+        }
+        if (!accessToken.equals(request.getHeader(JobRemotingUtil.XXL_RPC_ACCESS_TOKEN))) {
+            return new ReturnT<String>(ReturnT.FAIL_CODE, "The access token is wrong.");
+        }
+        return null;
+    }
+
+    /**
      * callback
      *
      * @param data
@@ -35,10 +54,9 @@ public class JobApiController {
     @RequestMapping("/callback")
     public ReturnT<String> callback(HttpServletRequest request, @RequestBody(required = false) String data) {
         // valid
-        if (JobAdminConfig.getAdminConfig().getAccessToken()!=null
-                && JobAdminConfig.getAdminConfig().getAccessToken().trim().length()>0
-                && !JobAdminConfig.getAdminConfig().getAccessToken().equals(request.getHeader(JobRemotingUtil.XXL_RPC_ACCESS_TOKEN))) {
-            return new ReturnT<>(ReturnT.FAIL_CODE, "The access token is wrong.");
+        ReturnT<String> tokenResult = validAccessToken(request);
+        if (tokenResult != null) {
+            return tokenResult;
         }
 
         // param
@@ -63,10 +81,9 @@ public class JobApiController {
     @RequestMapping("/processCallback")
     public ReturnT<String> processCallback(HttpServletRequest request, @RequestBody(required = false) String data) {
         // valid
-        if (JobAdminConfig.getAdminConfig().getAccessToken()!=null
-                && JobAdminConfig.getAdminConfig().getAccessToken().trim().length()>0
-                && !JobAdminConfig.getAdminConfig().getAccessToken().equals(request.getHeader(JobRemotingUtil.XXL_RPC_ACCESS_TOKEN))) {
-            return new ReturnT<>(ReturnT.FAIL_CODE, "The access token is wrong.");
+        ReturnT<String> tokenResult = validAccessToken(request);
+        if (tokenResult != null) {
+            return tokenResult;
         }
 
         // param
@@ -93,10 +110,9 @@ public class JobApiController {
     @RequestMapping("/registry")
     public ReturnT<String> registry(HttpServletRequest request, @RequestBody(required = false) String data) {
         // valid
-        if (JobAdminConfig.getAdminConfig().getAccessToken()!=null
-                && JobAdminConfig.getAdminConfig().getAccessToken().trim().length()>0
-                && !JobAdminConfig.getAdminConfig().getAccessToken().equals(request.getHeader(JobRemotingUtil.XXL_RPC_ACCESS_TOKEN))) {
-            return new ReturnT<String>(ReturnT.FAIL_CODE, "The access token is wrong.");
+        ReturnT<String> tokenResult = validAccessToken(request);
+        if (tokenResult != null) {
+            return tokenResult;
         }
 
         // param
@@ -121,10 +137,9 @@ public class JobApiController {
     @RequestMapping("/registryRemove")
     public ReturnT<String> registryRemove(HttpServletRequest request, @RequestBody(required = false) String data) {
         // valid
-        if (JobAdminConfig.getAdminConfig().getAccessToken()!=null
-                && JobAdminConfig.getAdminConfig().getAccessToken().trim().length()>0
-                && !JobAdminConfig.getAdminConfig().getAccessToken().equals(request.getHeader(JobRemotingUtil.XXL_RPC_ACCESS_TOKEN))) {
-            return new ReturnT<>(ReturnT.FAIL_CODE, "The access token is wrong.");
+        ReturnT<String> tokenResult = validAccessToken(request);
+        if (tokenResult != null) {
+            return tokenResult;
         }
 
         // param

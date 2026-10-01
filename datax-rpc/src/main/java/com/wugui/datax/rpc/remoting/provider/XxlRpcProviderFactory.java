@@ -38,6 +38,11 @@ public class XxlRpcProviderFactory {
 	private String ip = null;					// for registry
 	private int port = 7080;					// default port
 	private String accessToken = null;
+	/**
+	 * 兼容旧部署：只有显式置为 true，才允许 accessToken 为空的匿名调用。
+	 */
+	private boolean allowEmptyAccessToken = Boolean.parseBoolean(
+			System.getProperty("datax.rpc.allowEmptyAccessToken", "false"));
 
 	private Class<? extends ServiceRegistry> serviceRegistry = null;
 	private Map<String, String> serviceRegistryParam = null;
@@ -63,6 +68,9 @@ public class XxlRpcProviderFactory {
 	}
 	public void setAccessToken(String accessToken) {
 		this.accessToken = accessToken;
+	}
+	public void setAllowEmptyAccessToken(boolean allowEmptyAccessToken) {
+		this.allowEmptyAccessToken = allowEmptyAccessToken;
 	}
 
 	public void setServiceRegistry(Class<? extends ServiceRegistry> serviceRegistry) {
@@ -223,8 +231,14 @@ public class XxlRpcProviderFactory {
 			xxlRpcResponse.setErrorMsg("The timestamp difference between admin and executor exceeds the limit.");
 			return xxlRpcResponse;
 		}
-		if (accessToken!=null && accessToken.trim().length()>0 && !accessToken.trim().equals(xxlRpcRequest.getAccessToken())) {
-			xxlRpcResponse.setErrorMsg("The access token[" + xxlRpcRequest.getAccessToken() + "] is wrong.");
+		if (accessToken == null || accessToken.trim().length() == 0) {
+			// 默认拒绝：未配置令牌时 9999 端口不应成为匿名执行入口（CVE-2022-46478）
+			if (!allowEmptyAccessToken) {
+				xxlRpcResponse.setErrorMsg("The access token is not configured on provider side.");
+				return xxlRpcResponse;
+			}
+		} else if (!accessToken.trim().equals(xxlRpcRequest.getAccessToken())) {
+			xxlRpcResponse.setErrorMsg("The access token is wrong.");
 			return xxlRpcResponse;
 		}
 

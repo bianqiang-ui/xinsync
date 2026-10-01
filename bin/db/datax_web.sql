@@ -206,6 +206,10 @@ CREATE TABLE `job_user`  (
 -- ----------------------------
 -- Records of job_user
 -- ----------------------------
+-- 警告：下面这行哈希对应的明文是 123456（已用 BCrypt.checkpw 实测），即初始账号 admin / 123456。
+-- 网上流传的 admin/12345 是错的，登不上多半是这个原因，不是加密不一致。
+-- 部署完成后请立即登录并在「用户管理」里改掉密码，不要把初始化后的服务直接暴露到公网。
+-- admin 启动时若检测到该账号仍是初始哈希，会在日志里打 ERROR 提醒。
 INSERT INTO `job_user` VALUES (1, 'admin', '$2a$10$2KCqRbra0Yn2TwvkZxtfLuWuUP5KyCWsljO/ci5pLD27pqR3TV1vy', 'ROLE_ADMIN', NULL);
 
 

@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<configuration debug="false" scan="true" scanPeriod="1 seconds">
+<configuration debug="false" scan="true" scanPeriod="60 seconds">
 
     <contextName>exe</contextName>
     <property name="LOG_PATH"
-              value="${LOG_PATH:-${LOG_TEMP:-${java.io.tmpdir:-/data/applogs/executor/jobhandler}}}" />
+              value="${LOG_PATH:-${LOG_TEMP:-${java.io.tmpdir:-./data/applogs/executor/jobhandler}}}" />
 
     <appender name="console" class="ch.qos.logback.core.ConsoleAppender">
         <encoder>
@@ -14,7 +14,8 @@
     <appender name="file" class="ch.qos.logback.core.rolling.RollingFileAppender">
         <file>${LOG_PATH}/datax-executor.log</file>
         <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
-            <fileNamePattern>${LOG_PATH}.%d{yyyy-MM-dd}.zip</fileNamePattern>
+            <fileNamePattern>${LOG_PATH}/datax-executor.%d{yyyy-MM-dd}.zip</fileNamePattern>
+            <maxHistory>${LOG_MAX_HISTORY:-30}</maxHistory>
         </rollingPolicy>
         <encoder>
             <pattern>%date %level [%thread] %logger{20} [%file : %line] %msg%n

@@ -15,6 +15,8 @@ import javax.annotation.Resource;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 import static com.wugui.datatx.core.biz.model.ReturnT.FAIL_CODE;
 
@@ -32,6 +34,19 @@ public class UserController {
     @Resource
     private BCryptPasswordEncoder bCryptPasswordEncoder;
 
+    /**
+     * 用户名只允许字母、数字与 . _ - @，从源头阻断存储型 XSS 载荷（issue #652）
+     */
+    private static final Pattern USERNAME_PATTERN = Pattern.compile("^[A-Za-z0-9._@\\-]{4,20}$");
+
+    private static final String ILLEGAL_USERNAME_MSG = "用户名只能包含字母、数字和 . _ - @ ，长度 4-20";
+
+    private JobUser hidePassword(JobUser jobUser) {
+        if (jobUser != null) {
+            jobUser.setPassword(null);
+        }
+        return jobUser;
+    }
 
     @GetMapping("/pageList")
     @ApiOperation("用户列表")
@@ -47,7 +62,7 @@ public class UserController {
         Map<String, Object> maps = new HashMap<>();
         maps.put("recordsTotal", recordsTotal);        // 总记录数
         maps.put("recordsFiltered", recordsTotal);    // 过滤后的总记录数
-        maps.put("data", list);                    // 分页列表
+        maps.put("data", list.stream().map(this::hidePassword).collect(Collectors.toList()));                    // 分页列表
         return new ReturnT<>(maps);
     }
 
@@ -57,13 +72,13 @@ public class UserController {
 
         // page list
         List<JobUser> list = jobUserMapper.findAll(username);
-        return new ReturnT<>(list);
+        return new ReturnT<>(list.stream().map(this::hidePassword).collect(Collectors.toList()));
     }
 
     @GetMapping("/getUserById")
     @ApiOperation(value = "根据id获取用户")
     public ReturnT<JobUser> selectById(@RequestParam("userId") Integer userId) {
-        return new ReturnT<>(jobUserMapper.getUserById(userId));
+        return new ReturnT<>(hidePassword(jobUserMapper.getUserById(userId)));
     }
 
     @PostMapping("/add")
@@ -75,8 +90,8 @@ public class UserController {
             return new ReturnT<>(FAIL_CODE, I18nUtil.getString("system_please_input") + I18nUtil.getString("user_username"));
         }
         jobUser.setUsername(jobUser.getUsername().trim());
-        if (!(jobUser.getUsername().length() >= 4 && jobUser.getUsername().length() <= 20)) {
-            return new ReturnT<>(FAIL_CODE, I18nUtil.getString("system_length_limit") + "[4-20]");
+        if (!USERNAME_PATTERN.matcher(jobUser.getUsername()).matches()) {
+            return new ReturnT<>(FAIL_CODE, ILLEGAL_USERNAME_MSG);
         }
         // valid password
         if (!StringUtils.hasText(jobUser.getPassword())) {
@@ -103,6 +118,13 @@ public class UserController {
     @PostMapping(value = "/update")
     @ApiOperation("更新用户信息")
     public ReturnT<String> update(@RequestBody JobUser jobUser) {
+        if (StringUtils.hasText(jobUser.getUsername())) {
+            String username = jobUser.getUsername().trim();
+            if (!USERNAME_PATTERN.matcher(username).matches()) {
+                return new ReturnT<>(FAIL_CODE, ILLEGAL_USERNAME_MSG);
+            }
+            jobUser.setUsername(username);
+        }
         if (StringUtils.hasText(jobUser.getPassword())) {
             String pwd = jobUser.getPassword().trim();
             if (StrUtil.isBlank(pwd)) {
@@ -140,7 +162,13 @@ public class UserController {
             return new ReturnT<>(FAIL_CODE, I18nUtil.getString("system_length_limit") + "[4-20]");
         }
         // do write
-        JobUser existUser = jobUserMapper.loadByUserName(jobUser.getUsername());
+        if (!USERNAME_PATTERN.matcher(StrUtil.nullToEmpty(jobUser.getUsername()).trim()).matches()) {
+            return new ReturnT<>(FAIL_CODE, ILLEGAL_USERNAME_MSG);
+        }
+        JobUser existUser = jobUserMapper.loadByUserName(jobUser.getUsername().trim());
+        if (existUser == null) {
+            return new ReturnT<>(FAIL_CODE, "用户不存在");
+        }
         existUser.setPassword(bCryptPasswordEncoder.encode(password));
         jobUserMapper.update(existUser);
         return ReturnT.SUCCESS;

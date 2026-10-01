@@ -44,7 +44,7 @@ public interface JdbcConstants {
     String ALI_ORACLE_DRIVER          = "com.alibaba.jdbc.AlibabaDriver";
 
     String MYSQL                      = "mysql";
-    String MYSQL_DRIVER               = "com.mysql.jdbc.Driver";
+    String MYSQL_DRIVER               = "com.mysql.cj.jdbc.Driver";
     String MYSQL_DRIVER_6             = "com.mysql.cj.jdbc.Driver";
     String MYSQL_DRIVER_REPLICATE     = "com.mysql.jdbc.";
 
@@ -74,7 +74,7 @@ public interface JdbcConstants {
     String XUGU_DRIVER                = "com.xugu.cloudjdbc.Driver";
 
     String OCEANBASE                  = "oceanbase";
-    String OCEANBASE_DRIVER           = "com.mysql.jdbc.Driver";
+    String OCEANBASE_DRIVER           = "com.mysql.cj.jdbc.Driver";
     String INFORMIX                   = "informix";
 
     /**

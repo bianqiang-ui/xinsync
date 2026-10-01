@@ -1,12 +1,12 @@
 # web port
 server:
-  port: ${server.port}
-  #port: 8081
+  # 不要与 admin 的 8080 相同，同机部署会端口冲突
+  port: ${server.port:8092}
 
 # log config
 logging:
   config: classpath:logback.xml
-  path: ${data.path}/applogs/executor/jobhandler
+  path: ${data.path:./data}/applogs/executor/jobhandler
   #path: ./data/applogs/executor/jobhandler
 
 datax:
@@ -14,7 +14,7 @@ datax:
     admin:
       ### datax admin address list, such as "http://address" or "http://address01,http://address02"
       #addresses: http://127.0.0.1:8080
-      addresses: http://127.0.0.1:${datax.admin.port}
+      addresses: http://127.0.0.1:${datax.admin.port:8080}
     executor:
       appname: datax-executor
       ip:
@@ -22,15 +22,21 @@ datax:
       port: ${executor.port:9999}
       ### job log path
       #logpath: ./data/applogs/executor/jobhandler
-      logpath: ${data.path}/applogs/executor/jobhandler
+      logpath: ${data.path:./data}/applogs/executor/jobhandler
       ### job log retention days
       logretentiondays: 30
     ### job, access token
-    accessToken:
+    # SECURITY: 生产环境必须与 admin 侧 DATAX_ACCESS_TOKEN 保持一致；留空时 executor 的 RPC 端口会拒绝所有请求
+    accessToken: ${DATAX_ACCESS_TOKEN:}
+    # 兼容旧部署：设为 true 才允许 accessToken 为空的匿名调用
+    allowEmptyAccessToken: ${DATAX_ALLOW_EMPTY_ACCESS_TOKEN:false}
 
   executor:
     #jsonpath: D:\\temp\\executor\\json\\
-    jsonpath: ${json.path}
+    jsonpath: ${json.path:./data/json}
+    # python 解释器，Windows 一般保持 python，Linux 可改为 python3 或绝对路径
+    # 启动脚本里的 PYTHON_BIN / -Ddatax.executor.python 优先级高于此处
+    python: python
 
   #pypath: F:\tools\datax\bin\datax.py
-  pypath: ${python.path}
+  pypath: ${python.path:}
