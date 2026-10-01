@@ -91,7 +91,7 @@ flowchart TD
 | `DATAX_AES_KEY` | `datasource.aes.key` | 用出厂 key → 启动打 ERROR，且**任何登录用户都能解出数据源口令** |
 | `DATAX_ACCESS_TOKEN` | `datax.job.accessToken` | 为空 → 执行器匿名回调被拒（默认安全侧） |
 
-> 注意 `env.properties` 里还有两个**死键**：`WEB_LOG_PATH`、`WEB_CONF_PATH`。脚本读的是 `SERVICE_LOG_PATH`、`SERVICE_CONF_PATH`，所以改前者无效（admin 日志实际落在 `data/applogs/admin/`）。
+> 注意 `env.properties` 里还有两个**死键**：`WEB_LOG_PATH`、`WEB_CONF_PATH`。脚本读的是 `SERVICE_LOG_PATH`、`SERVICE_CONF_PATH`，改前者无效。日志文件的位置也不跟 `SERVICE_LOG_PATH` 走 —— 脚本传的是 `-Dlog.path`，而 `conf/logback.xml` 读的是 `${LOG_PATH}`（不同名），实测落在 `<安装根>/data/applogs/admin/datax-admin.log`。
 
 ### 4.2 datax-executor
 
