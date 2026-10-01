@@ -1,5 +1,8 @@
 # datax-web部署方案
 
+> **本文的"编译/执行"两步（7.4、7.5）在当前版本已失效**：`mvn package` 产出的是没有 `Main-Class` 的瘦 jar，`nohup java -jar` 起不来。
+> 构建与启动请以 [datax-web-deploy-V2.1.2.md](datax-web-deploy-V2.1.2.md) 为准（`mvn install` + `bin/datax-admin.sh`，admin 默认端口 9527）；本文其余的安装依赖步骤（java/mysql/python/datax/maven）仍然可用。
+
 [datax-web](https://github.com/WeiYe-Jing/datax-web)是针对datax开发的一款可视化解决方案，可以在web端实现对datax的可视化操作，以及相关的任务创建、管理、调度以及日志查看。现在简单介绍一下在linux环境下datax-web相关部署方案。
 
 
