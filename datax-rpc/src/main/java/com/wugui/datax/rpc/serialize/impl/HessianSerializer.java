@@ -15,6 +15,7 @@ import java.io.IOException;
  */
 public class HessianSerializer extends Serializer {
 
+
 	@Override
 	public <T> byte[] serialize(T obj){
 		ByteArrayOutputStream os = new ByteArrayOutputStream();
@@ -45,6 +46,7 @@ public class HessianSerializer extends Serializer {
 	public <T> Object deserialize(byte[] bytes, Class<T> clazz) {
 		ByteArrayInputStream is = new ByteArrayInputStream(bytes);
 		Hessian2Input hi = new Hessian2Input(is);
+		hi.setSerializerFactory(WhitelistSerializerFactory.INSTANCE);
 		try {
 			Object result = hi.readObject();
 			return result;

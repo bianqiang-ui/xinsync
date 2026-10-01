@@ -72,8 +72,12 @@ public class MetadataController extends BaseController {
      */
     @GetMapping("/getTables")
     @ApiOperation("根据数据源id获取可用表名")
-    public R<List<String>> getTableNames(Long datasourceId,String tableSchema) throws IOException {
-        return success(datasourceQueryService.getTables(datasourceId,tableSchema));
+    public R<List<String>> getTableNames(Long datasourceId, String tableSchema) throws IOException {
+        try {
+            return success(datasourceQueryService.getTables(datasourceId, tableSchema));
+        } catch (IllegalArgumentException e) {
+            return failed(e.getMessage());
+        }
     }
 
     /**
@@ -86,7 +90,11 @@ public class MetadataController extends BaseController {
     @GetMapping("/getColumns")
     @ApiOperation("根据数据源id和表名获取所有字段")
     public R<List<String>> getColumns(Long datasourceId, String tableName) throws IOException {
-        return success(datasourceQueryService.getColumns(datasourceId, tableName));
+        try {
+            return success(datasourceQueryService.getColumns(datasourceId, tableName));
+        } catch (IllegalArgumentException e) {
+            return failed(e.getMessage());
+        }
     }
 
     /**
@@ -98,7 +106,14 @@ public class MetadataController extends BaseController {
      */
     @GetMapping("/getColumnsByQuerySql")
     @ApiOperation("根据数据源id和sql语句获取所有字段")
-    public R<List<String>> getColumnsByQuerySql(Long datasourceId, String querySql) throws SQLException {
-        return success(datasourceQueryService.getColumnsByQuerySql(datasourceId, querySql));
+    public R<List<String>> getColumnsByQuerySql(Long datasourceId, String querySql) {
+        try {
+            return success(datasourceQueryService.getColumnsByQuerySql(datasourceId, querySql));
+        } catch (IllegalArgumentException e) {
+            return failed(e.getMessage());
+        } catch (Exception e) {
+            logger.error("getColumnsByQuerySql error, datasourceId=" + datasourceId, e);
+            return failed("查询字段失败，请检查 SQL 与数据源配置");
+        }
     }
 }

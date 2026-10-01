@@ -37,6 +37,29 @@ import java.util.Map;
 public abstract class BaseQueryTool implements QueryToolInterface {
 
     protected static final Logger logger = LoggerFactory.getLogger(BaseQueryTool.class);
+
+    /**
+     * schema/表/列名会被各 DatabaseMeta 直接拼进元数据 SQL（无法参数化），这里统一限制字符集，阻断注入
+     */
+    private static final String IDENTIFIER_RULE = "^[A-Za-z0-9_$#.]{1,128}$";
+
+    static String checkIdentifier(String name, String desc) {
+        if (StringUtils.isBlank(name)) {
+            throw new IllegalArgumentException(desc + "不能为空");
+        }
+        String value = name.trim();
+        if (!value.matches(IDENTIFIER_RULE)) {
+            throw new IllegalArgumentException("非法的" + desc + "：" + value);
+        }
+        return value;
+    }
+
+    /**
+     * 部分调用方允许不传（表示全库查询），只在传了值的时候做校验
+     */
+    static String checkIdentifierIfPresent(String name, String desc) {
+        return StringUtils.isBlank(name) ? name : checkIdentifier(name, desc);
+    }
     /**
      * 用于获取查询语句
      */
@@ -112,6 +135,7 @@ public abstract class BaseQueryTool implements QueryToolInterface {
 
     @Override
     public TableInfo buildTableInfo(String tableName) {
+        checkIdentifierIfPresent(tableName, "表名");
         //获取表信息
         List<Map<String, Object>> tableInfos = this.getTableInfo(tableName);
         if (tableInfos.isEmpty()) {
@@ -148,6 +172,7 @@ public abstract class BaseQueryTool implements QueryToolInterface {
     //无论怎么查，返回结果都应该只有表名和表注释，遍历map拿value值即可
     @Override
     public List<Map<String, Object>> getTableInfo(String tableName) {
+        checkIdentifierIfPresent(tableName, "表名");
         String sqlQueryTableNameComment = sqlBuilder.getSQLQueryTableNameComment();
         logger.info(sqlQueryTableNameComment);
         List<Map<String, Object>> res = null;
@@ -179,6 +204,7 @@ public abstract class BaseQueryTool implements QueryToolInterface {
 
         List<ColumnInfo> fullColumn = Lists.newArrayList();
         //获取指定表的所有字段
+        checkIdentifierIfPresent(tableName, "表名");
         try {
             //获取查询指定表所有字段的sql语句
             String querySql = sqlBuilder.getSQLQueryFields(tableName);
@@ -295,6 +321,7 @@ public abstract class BaseQueryTool implements QueryToolInterface {
         List<String> res = Lists.newArrayList();
         Statement stmt = null;
         ResultSet rs = null;
+        checkIdentifierIfPresent(tableName, "表名");
         try {
             //获取查询指定表所有字段的sql语句
             String querySql = sqlBuilder.getSQLQueryFields(tableName);
@@ -332,6 +359,7 @@ public abstract class BaseQueryTool implements QueryToolInterface {
     @Override
     public List<String> getTableNames(String tableSchema) {
         List<String> tables = new ArrayList<String>();
+        checkIdentifierIfPresent(tableSchema, "schema");
         Statement stmt = null;
         ResultSet rs = null;
         try {
@@ -411,21 +439,8 @@ public abstract class BaseQueryTool implements QueryToolInterface {
         List<String> res = Lists.newArrayList();
         Statement stmt = null;
         ResultSet rs = null;
+        String sql = buildLimitSql(querySql);
         try {
-            querySql = querySql.replace(";", "");
-            //拼装sql语句，在后面加上 where 1=0 即可
-            String sql = querySql.concat(" where 1=0");
-            //判断是否已有where，如果是，则加 and 1=0
-            //从最后一个 ) 开始找 where，或者整个语句找
-            if (querySql.contains(")")) {
-                if (querySql.substring(querySql.indexOf(")")).contains("where")) {
-                    sql = querySql.concat(" and 1=0");
-                }
-            } else {
-                if (querySql.contains("where")) {
-                    sql = querySql.concat(" and 1=0");
-                }
-            }
             //获取所有字段
             stmt = connection.createStatement();
             rs = stmt.executeQuery(sql);
@@ -435,6 +450,10 @@ public abstract class BaseQueryTool implements QueryToolInterface {
             for (int i = 1; i <= columnCount; i++) {
                 res.add(metaData.getColumnName(i));
             }
+        } catch (SQLException e) {
+            logger.error("[getColumnsByQuerySql Exception] --> " + e.getMessage(), e);
+            // 不把数据库原始报错回传前端，避免泄露库表结构信息
+            throw new SQLException("查询字段失败，请检查 SQL 语法是否正确");
         } finally {
             JdbcUtils.close(rs);
             JdbcUtils.close(stmt);
@@ -442,8 +461,39 @@ public abstract class BaseQueryTool implements QueryToolInterface {
         return res;
     }
 
+    /**
+     * 只允许单条 select 语句，并追加恒假条件用于取列名。
+     */
+    private String buildLimitSql(String querySql) {
+        if (StringUtils.isBlank(querySql)) {
+            throw new IllegalArgumentException("SQL 不能为空");
+        }
+        String sql = querySql.trim();
+        while (sql.endsWith(";")) {
+            sql = sql.substring(0, sql.length() - 1).trim();
+        }
+        String lower = sql.toLowerCase();
+        if (sql.indexOf(';') >= 0) {
+            throw new IllegalArgumentException("只允许执行单条 SQL 语句");
+        }
+        if (!lower.startsWith("select")) {
+            throw new IllegalArgumentException("只允许执行 select 查询语句");
+        }
+        if (lower.contains("--") || lower.contains("#") || lower.contains("/*") || lower.contains("*/")) {
+            throw new IllegalArgumentException("SQL 中不允许包含注释");
+        }
+        if (lower.matches("(?s).*(insert|update|delete|drop|truncate|alter|create|grant|revoke|exec|execute)\\s.*")) {
+            throw new IllegalArgumentException("SQL 中不允许出现写操作关键字");
+        }
+        //拼装sql语句，在后面加上 where 1=0 即可
+        //判断是否已有 where，如果是，则加 and 1=0
+        return (lower.contains("where") ? sql.concat(" and 1=0") : sql.concat(" where 1=0"));
+    }
+
     @Override
     public long getMaxIdVal(String tableName, String primaryKey) {
+        checkIdentifier(tableName, "表名");
+        checkIdentifier(primaryKey, "主键名");
         Statement stmt = null;
         ResultSet rs = null;
         long maxVal = 0;

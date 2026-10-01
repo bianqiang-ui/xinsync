@@ -33,6 +33,7 @@ public class JobExecutor {
     private String ip;
     private int port;
     private String accessToken;
+    private boolean allowEmptyAccessToken = false;
     private String logPath;
     private int logRetentionDays;
 
@@ -54,6 +55,10 @@ public class JobExecutor {
 
     public void setAccessToken(String accessToken) {
         this.accessToken = accessToken;
+    }
+
+    public void setAllowEmptyAccessToken(boolean allowEmptyAccessToken) {
+        this.allowEmptyAccessToken = allowEmptyAccessToken;
     }
 
     public void setLogPath(String logPath) {
@@ -85,6 +90,16 @@ public class JobExecutor {
         ProcessCallbackThread.getInstance().start();
 
         // init executor-server
+        if (accessToken == null || accessToken.trim().length() == 0) {
+            if (allowEmptyAccessToken) {
+                logger.warn(">>>>>>>>>>> datax-web, executor access token is empty and anonymous RPC is explicitly "
+                        + "allowed (allowEmptyAccessToken=true). Not recommended.");
+            } else {
+                logger.error(">>>>>>>>>>> datax-web, executor access token is empty, the rpc provider will reject every "
+                        + "request. Configure the same token on admin and executor (DATAX_ACCESS_TOKEN), "
+                        + "or set datax.job.allowEmptyAccessToken=true to keep the legacy behaviour.");
+            }
+        }
         port = port > 0 ? port : NetUtil.findAvailablePort(9999);
         ip = (ip != null && ip.trim().length() > 0) ? ip : IpUtil.getIp();
         initRpcProvider(ip, port, appName, accessToken);
@@ -174,6 +189,7 @@ public class JobExecutor {
         xxlRpcProviderFactory.setIp(ip);
         xxlRpcProviderFactory.setPort(port);
         xxlRpcProviderFactory.setAccessToken(accessToken);
+        xxlRpcProviderFactory.setAllowEmptyAccessToken(allowEmptyAccessToken);
         xxlRpcProviderFactory.setServiceRegistry(ExecutorServiceRegistry.class);
         xxlRpcProviderFactory.setServiceRegistryParam(serviceRegistryParam);
 

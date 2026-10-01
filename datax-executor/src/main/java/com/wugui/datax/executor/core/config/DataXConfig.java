@@ -35,6 +35,9 @@ public class DataXConfig {
     @Value("${datax.job.accessToken}")
     private String accessToken;
 
+    @Value("${datax.job.allowEmptyAccessToken:false}")
+    private boolean allowEmptyAccessToken;
+
     @Value("${datax.job.executor.logpath}")
     private String logPath;
 
@@ -51,6 +54,7 @@ public class DataXConfig {
         jobSpringExecutor.setIp(ip);
         jobSpringExecutor.setPort(port);
         jobSpringExecutor.setAccessToken(accessToken);
+        jobSpringExecutor.setAllowEmptyAccessToken(allowEmptyAccessToken);
         String dataXHomePath = SystemUtils.getDataXHomePath();
         if (StringUtils.isEmpty(logPath)) {
             logPath = dataXHomePath + DEFAULT_LOG_PATH;

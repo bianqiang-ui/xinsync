@@ -86,7 +86,8 @@ if [[ ! ${PYTHON_PATH} ]]; then
 fi
 
 if [[ ! ${SERVER_PORT} ]]; then
-   SERVER_PORT=9004
+   # 执行器自身的 web 端口，不能与 admin 的 8080 相同，否则同机部署端口冲突
+   SERVER_PORT=8092
 fi
 
 if [[ ! ${EXECUTOR_PORT} ]]; then
@@ -94,7 +95,12 @@ if [[ ! ${EXECUTOR_PORT} ]]; then
 fi
 
 if [[ ! ${DATAX_ADMIN_PORT} ]]; then
-   DATAX_ADMIN_PORT=9527
+   # datax-admin 的服务端口，需与 admin 启动脚本里的 SERVER_PORT 一致
+   DATAX_ADMIN_PORT=8080
+fi
+
+if [[ ! ${PYTHON_BIN} ]]; then
+   PYTHON_BIN=python
 fi
 
 
@@ -120,7 +126,7 @@ if [ ${REMOTE_DEBUG_SWITCH} == true ]; then
 fi
 JAVA_OPTS=${JAVA_OPTS}" -XX:HeapDumpPath="${SERVICE_LOG_PATH}" -Dlog.path="${SERVICE_LOG_PATH}
 JAVA_OPTS=${JAVA_OPTS}" -Duser.dir="${USER_DIR}
-JAVA_OPTS=${JAVA_OPTS}" -Dserver.port="${SERVER_PORT}" -Ddata.path="${DATA_PATH}" -Dexecutor.port="${EXECUTOR_PORT}" -Djson.path="${JSON_PATH}" -Dpython.path="${PYTHON_PATH}" -Ddatax.admin.port="${DATAX_ADMIN_PORT}
+JAVA_OPTS=${JAVA_OPTS}" -Dserver.port="${SERVER_PORT}" -Ddata.path="${DATA_PATH}" -Dexecutor.port="${EXECUTOR_PORT}" -Djson.path="${JSON_PATH}" -Dpython.path="${PYTHON_PATH}" -Ddatax.executor.python="${PYTHON_BIN}" -Ddatax.admin.port="${DATAX_ADMIN_PORT}
 if [ "x"${PID_FILE_PATH} != "x" ]; then
   JAVA_OPTS=${JAVA_OPTS}" -Dpid.file="${PID_FILE_PATH}
 fi

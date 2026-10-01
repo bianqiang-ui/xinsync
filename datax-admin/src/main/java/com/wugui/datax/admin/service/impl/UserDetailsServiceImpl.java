@@ -22,8 +22,12 @@ public class UserDetailsServiceImpl implements UserDetailsService {
     private JobUserMapper jobUserMapper;
 
     @Override
-    public UserDetails loadUserByUsername(String s) throws UsernameNotFoundException {
-        JobUser user = jobUserMapper.loadByUserName(s);
+    public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
+        JobUser user = username == null ? null : jobUserMapper.loadByUserName(username.trim());
+        if (user == null) {
+            // 统一走认证失败，不把“用户不存在”和“密码错误”区分开，避免账号枚举
+            throw new UsernameNotFoundException("bad user");
+        }
         return new JwtUser(user);
     }
 
