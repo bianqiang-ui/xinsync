@@ -62,8 +62,9 @@ public class AdminBizImpl implements AdminBiz {
     }
 
     private ReturnT<String> processCallback(HandleProcessCallbackParam handleProcessCallbackParam) {
+        // 返回值是受影响行数：0 通常表示 processId 没变化，不是失败。原写法 result > 0 ? FAIL : SUCCESS 把成功报成了失败。
         int result = jobLogMapper.updateProcessId(handleProcessCallbackParam.getLogId(), handleProcessCallbackParam.getProcessId());
-        return result > 0 ? ReturnT.FAIL : ReturnT.SUCCESS;
+        return result >= 0 ? ReturnT.SUCCESS : new ReturnT<String>(ReturnT.FAIL_CODE, "process id update failed, result = " + result);
     }
 
 
