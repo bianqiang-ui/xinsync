@@ -16,6 +16,9 @@ public class DatabaseMetaFactory {
     public static DatabaseInterface getByDbType(String dbType) {
         if (JdbcConstants.MYSQL.equals(dbType)) {
             return MySQLDatabaseMeta.getInstance();
+        } else if (JdbcConstants.TDSQL.equals(dbType)) {
+            // 同 QueryToolFactory：TDSQL 走 MySQL 方言取元数据
+            return MySQLDatabaseMeta.getInstance();
         } else if (JdbcConstants.ORACLE.equals(dbType)) {
             return OracleDatabaseMeta.getInstance();
         } else if (JdbcConstants.POSTGRESQL.equals(dbType)) {

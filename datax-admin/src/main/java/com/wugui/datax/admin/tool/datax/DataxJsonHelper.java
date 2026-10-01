@@ -103,7 +103,8 @@ public class DataxJsonHelper implements DataxJsonInterface {
         String datasource = readerDatasource.getDatasource();
 
         this.readerColumns = convertKeywordsColumns(datasource, this.readerColumns);
-        if (MYSQL.equals(datasource)) {
+        if (MYSQL.equals(datasource) || TDSQL.equals(datasource)) {
+            // TDSQL 用 mysqlreader 连 proxy 的逻辑表，路由交给内核（模式 A，见 docs/tdsql-plan.md）
             readerPlugin = new MysqlReader();
             buildReader = buildReader();
         } else if (ORACLE.equals(datasource)) {
@@ -141,7 +142,7 @@ public class DataxJsonHelper implements DataxJsonInterface {
         // writer
         String datasource = readerDatasource.getDatasource();
         this.writerColumns = convertKeywordsColumns(datasource, this.writerColumns);
-        if (MYSQL.equals(datasource)) {
+        if (MYSQL.equals(datasource) || TDSQL.equals(datasource)) {
             writerPlugin = new MysqlWriter();
             buildWriter = this.buildWriter();
         } else if (ORACLE.equals(datasource)) {
@@ -194,6 +195,7 @@ public class DataxJsonHelper implements DataxJsonInterface {
 
         switch (dbType) {
             case MYSQL:
+            case TDSQL:
                 return String.format("`%s`", column);
             case SQL_SERVER:
                 return String.format("[%s]", column);
