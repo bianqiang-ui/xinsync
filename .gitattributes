@@ -1,0 +1,5 @@
+# 仓库里的 shell 脚本必须以 LF 落盘。
+# 这台机器 core.autocrlf=true，Windows 检出的 .sh 会带 CRLF，
+# 拿到 Linux/容器里 `bash xxx.sh` 会因行尾 \r 直接报错；打包时 assembly 又靠
+# <lineEnding>unix</lineEnding> 兜底，两条路口径不一致。
+*.sh text eol=lf
