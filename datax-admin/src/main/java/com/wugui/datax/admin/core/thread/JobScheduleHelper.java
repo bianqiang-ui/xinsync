@@ -29,11 +29,14 @@ public class JobScheduleHelper {
 
     public static final long PRE_READ_MS = 5000;    // pre read
 
+    private static final long ITEM_ERROR_LOG_INTERVAL_MS = 5 * 60 * 1000L;
+
     private Thread scheduleThread;
     private Thread ringThread;
     private volatile boolean scheduleThreadToStop = false;
     private volatile boolean ringThreadToStop = false;
     private volatile static Map<Integer, List<Integer>> ringData = new ConcurrentHashMap<>();
+    private final Map<Integer, Long> itemErrorLogTime = new ConcurrentHashMap<>();
 
     public void start() {
 
@@ -81,53 +84,14 @@ public class JobScheduleHelper {
                         if (scheduleList != null && scheduleList.size() > 0) {
                             // 2、push time-ring
                             for (JobInfo jobInfo : scheduleList) {
-
-                                // time-ring jump
-                                if (nowTime > jobInfo.getTriggerNextTime() + PRE_READ_MS) {
-                                    // 2.1、trigger-expire > 5s：pass && make next-trigger-time
-                                    logger.warn(">>>>>>>>>>> datax-web, schedule misfire, jobId = " + jobInfo.getId());
-
-                                    // fresh next
-                                    refreshNextValidTime(jobInfo, new Date());
-
-                                } else if (nowTime > jobInfo.getTriggerNextTime()) {
-                                    // 2.2、trigger-expire < 5s：direct-trigger && make next-trigger-time
-
-                                    // 1、trigger
-                                    JobTriggerPoolHelper.trigger(jobInfo.getId(), TriggerTypeEnum.CRON, -1, null, null);
-                                    logger.debug(">>>>>>>>>>> datax-web, schedule push trigger : jobId = " + jobInfo.getId());
-
-                                    // 2、fresh next
-                                    refreshNextValidTime(jobInfo, new Date());
-
-                                    // next-trigger-time in 5s, pre-read again
-                                    if (jobInfo.getTriggerStatus() == 1 && nowTime + PRE_READ_MS > jobInfo.getTriggerNextTime()) {
-
-                                        // 1、make ring second
-                                        int ringSecond = (int) ((jobInfo.getTriggerNextTime() / 1000) % 60);
-
-                                        // 2、push time ring
-                                        pushTimeRing(ringSecond, jobInfo.getId());
-
-                                        // 3、fresh next
-                                        refreshNextValidTime(jobInfo, new Date(jobInfo.getTriggerNextTime()));
-
-                                    }
-
-                                } else {
-                                    // 2.3、trigger-pre-read：time-ring trigger && make next-trigger-time
-
-                                    // 1、make ring second
-                                    int ringSecond = (int) ((jobInfo.getTriggerNextTime() / 1000) % 60);
-
-                                    // 2、push time ring
-                                    pushTimeRing(ringSecond, jobInfo.getId());
-
-                                    // 3、fresh next
-                                    refreshNextValidTime(jobInfo, new Date(jobInfo.getTriggerNextTime()));
-
+                                // 一个 job 抛异常不能拖垮整批：异常若逃到这里，后面的 job 全部不再处理，
+                                // 且下面的 scheduleUpdate 也不会执行——已触发 job 的 next-trigger-time 不落地，
+                                // 表现为社区报的 #389「定时任务不触发」。cron 非法（例如填了 5 段 unix crons）就在这里抛。
+                                try {
+                                    handleScheduleItem(jobInfo, nowTime);
+                                } catch (Exception e) {
+                                    logScheduleItemError(jobInfo, e);
                                 }
-
                             }
 
                             // 3、update trigger info
@@ -265,6 +229,75 @@ public class JobScheduleHelper {
         ringThread.setDaemon(true);
         ringThread.setName("datax-web, admin JobScheduleHelper#ringThread");
         ringThread.start();
+    }
+
+    /**
+     * 单个 job 的一个调度刻度处理：过期不补、临期直触、未到入时间轮。
+     * 抛出 ParseException（cron 非法）等异常时由调用方按 job 粒度隔离。
+     */
+    private void handleScheduleItem(JobInfo jobInfo, long nowTime) throws Exception {
+
+        // time-ring jump
+        if (nowTime > jobInfo.getTriggerNextTime() + PRE_READ_MS) {
+            // 2.1、trigger-expire > 5s：pass && make next-trigger-time
+            logger.warn(">>>>>>>>>>> datax-web, schedule misfire, jobId = " + jobInfo.getId());
+
+            // fresh next
+            refreshNextValidTime(jobInfo, new Date());
+
+        } else if (nowTime > jobInfo.getTriggerNextTime()) {
+            // 2.2、trigger-expire < 5s：direct-trigger && make next-trigger-time
+
+            // 1、trigger
+            JobTriggerPoolHelper.trigger(jobInfo.getId(), TriggerTypeEnum.CRON, -1, null, null);
+            logger.debug(">>>>>>>>>>> datax-web, schedule push trigger : jobId = " + jobInfo.getId());
+
+            // 2、fresh next
+            refreshNextValidTime(jobInfo, new Date());
+
+            // next-trigger-time in 5s, pre-read again
+            if (jobInfo.getTriggerStatus() == 1 && nowTime + PRE_READ_MS > jobInfo.getTriggerNextTime()) {
+
+                // 1、make ring second
+                int ringSecond = (int) ((jobInfo.getTriggerNextTime() / 1000) % 60);
+
+                // 2、push time ring
+                pushTimeRing(ringSecond, jobInfo.getId());
+
+                // 3、fresh next
+                refreshNextValidTime(jobInfo, new Date(jobInfo.getTriggerNextTime()));
+
+            }
+
+        } else {
+            // 2.3、trigger-pre-read：time-ring trigger && make next-trigger-time
+
+            // 1、make ring second
+            int ringSecond = (int) ((jobInfo.getTriggerNextTime() / 1000) % 60);
+
+            // 2、push time ring
+            pushTimeRing(ringSecond, jobInfo.getId());
+
+            // 3、fresh next
+            refreshNextValidTime(jobInfo, new Date(jobInfo.getTriggerNextTime()));
+
+        }
+    }
+
+    /**
+     * 调度项失败日志限流：坏 cron 的 job 每秒都会再撞上一次，不去重的话日志会把磁盘写满。
+     */
+    private void logScheduleItemError(JobInfo jobInfo, Exception e) {
+        Integer jobId = jobInfo.getId();
+        long now = System.currentTimeMillis();
+        Long last = itemErrorLogTime.get(jobId);
+        if (last != null && now - last < ITEM_ERROR_LOG_INTERVAL_MS) {
+            return;
+        }
+        itemErrorLogTime.put(jobId, now);
+        // 用字符串拼接而不是 {} 占位符：异常作为最后一个参数时占位符不会被替换，栈也丢了
+        logger.error(">>>>>>>>>>> datax-web, schedule item skipped, jobId = " + jobId
+                + ", cron = [" + jobInfo.getJobCron() + "]", e);
     }
 
     private void refreshNextValidTime(JobInfo jobInfo, Date fromTime) throws ParseException {

@@ -52,7 +52,16 @@ public class JobTrigger {
         }
         if (GlueTypeEnum.BEAN.getDesc().equals(jobInfo.getGlueType())) {
             //解密账密
-            String json = JSONUtils.changeJson(jobInfo.getJobJson(), JSONUtils.decrypt);
+            String json;
+            try {
+                json = JSONUtils.changeJson(jobInfo.getJobJson(), JSONUtils.decrypt);
+            } catch (Exception e) {
+                // job_json 为空或结构不完整时这里会抛（JSONUtils:59 NPE）。异常原先直接逃进触发线程池，
+                // 日志页一条记录都没有，用户只看到"任务失败了但没有运行日志"（社区 #389 的描述）
+                String reason = "job_json 无法解析（为空或缺少 job/content 结构），无法解密数据源账密：" + e;
+                triggerFailLog(jobInfo, triggerType, reason);
+                return;
+            }
             jobInfo.setJobJson(json);
         }
         if (StringUtils.isNotBlank(executorParam)) {
@@ -93,6 +102,30 @@ public class JobTrigger {
         } catch (NumberFormatException e) {
             return false;
         }
+    }
+
+    /**
+     * 派发之前就失败时补一条调度日志：让失败原因出现在日志页面，而不是只留在 admin 控制台。
+     */
+    private static void triggerFailLog(JobInfo jobInfo, TriggerTypeEnum triggerType, String reason) {
+        Calendar calendar = Calendar.getInstance();
+        calendar.setTime(new Date());
+        calendar.set(Calendar.MILLISECOND, 0);
+
+        JobLog jobLog = new JobLog();
+        jobLog.setJobGroup(jobInfo.getJobGroup());
+        jobLog.setJobId(jobInfo.getId());
+        jobLog.setJobDesc(jobInfo.getJobDesc());
+        jobLog.setTriggerTime(calendar.getTime());
+        jobLog.setExecutorHandler(jobInfo.getExecutorHandler());
+        jobLog.setTriggerCode(ReturnT.FAIL_CODE);
+        jobLog.setTriggerMsg(I18nUtil.getString("jobconf_trigger_type") + "：" + triggerType.getTitle()
+                + "<br>" + reason);
+        JobAdminConfig.getAdminConfig().getJobLogMapper().save(jobLog);
+        JobAdminConfig.getAdminConfig().getJobLogMapper().updateTriggerInfo(jobLog);
+
+        logger.error(">>>>>>>>>>> datax-web, trigger fail before dispatch, jobId = {}, logId = {}, {}",
+                jobInfo.getId(), jobLog.getId(), reason);
     }
 
     /**
