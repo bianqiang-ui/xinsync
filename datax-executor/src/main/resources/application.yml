@@ -1,8 +1,8 @@
 # web port
 server:
   # 不要写成 ${server.port:...}（同名自引用会 Circular placeholder reference）；
-  # 改端口用 -Dserver.port=xxxx。执行器与 admin 同机部署时不能都是 8080。
-  port: 8092
+  # 这里是"脱离启动脚本裸跑"时的兜底，打包部署由 env.properties 的 SERVER_PORT=9504 经 -Dserver.port 覆盖
+  port: 9504
 
 # log config
 logging:
@@ -14,8 +14,10 @@ datax:
   job:
     admin:
       ### datax admin address list, such as "http://address" or "http://address01,http://address02"
-      #addresses: http://127.0.0.1:8080
-      addresses: http://127.0.0.1:${datax.admin.port:8080}
+      #addresses: http://127.0.0.1:9527
+      # 9527 = admin 默认端口（doc/datax-web/datax-web-deploy.md）；打包部署时启动脚本以
+      # -Ddatax.admin.port 覆盖（env.properties 的 DATAX_ADMIN_PORT 出厂为空，走脚本兜底 9527）
+      addresses: http://127.0.0.1:${datax.admin.port:9527}
     executor:
       appname: datax-executor
       ip:

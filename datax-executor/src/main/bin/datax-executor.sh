@@ -86,8 +86,8 @@ if [[ ! ${PYTHON_PATH} ]]; then
 fi
 
 if [[ ! ${SERVER_PORT} ]]; then
-   # 执行器自身的 web 端口，不能与 admin 的 8080 相同，否则同机部署端口冲突
-   SERVER_PORT=8092
+   # 只有 env.properties 里 SERVER_PORT 被留空时才会走到这里，取值须与 env.properties 一致
+   SERVER_PORT=9504
 fi
 
 if [[ ! ${EXECUTOR_PORT} ]]; then
@@ -95,8 +95,9 @@ if [[ ! ${EXECUTOR_PORT} ]]; then
 fi
 
 if [[ ! ${DATAX_ADMIN_PORT} ]]; then
-   # datax-admin 的服务端口，需与 admin 启动脚本里的 SERVER_PORT 一致
-   DATAX_ADMIN_PORT=8080
+   # env.properties 里 DATAX_ADMIN_PORT 出厂就是空值，所以这一行是打包部署真正生效的分支：
+   # 必须等于 admin 的端口（9527），否则执行器注册全部打到不存在的端口上。
+   DATAX_ADMIN_PORT=9527
 fi
 
 if [[ ! ${PYTHON_BIN} ]]; then
@@ -145,19 +146,55 @@ usage(){
     echo " usage is [start|stop|shutdown|restart]"
 }
 
+# jps 会列出僵尸 JVM（hsperfdata 文件不随进程退出清理），僵尸会让 start 拒绝启动、stop 空等 20s 超时
+alive_pid(){
+    local pid="$1"
+    if [ "x${pid}" == "x" ]; then return 1; fi
+    case "${pid}" in
+        *[!0-9]*) return 1 ;;
+    esac
+    kill -0 "${pid}" 2>/dev/null || return 1
+    # 非 Linux（macOS/Solaris）没有 /proc，此时只依赖 kill -0
+    if [ -r "/proc/${pid}/status" ]; then
+        local state=`grep -m1 '^State:' "/proc/${pid}/status" 2>/dev/null | awk '{print $2}'`
+        if [ "x${state}" == "xZ" ]; then return 1; fi
+    fi
+    return 0
+}
+
+# print the pids of our own live JVMs, matched by main class
+live_class_pids(){
+    local found=""
+    local pid
+    for pid in `${JPS} -l 2>/dev/null | awk -v cls="$1" '$2==cls {print $1}'`; do
+        if alive_pid ${pid}; then
+            found="${found} ${pid}"
+        fi
+    done
+    echo ${found}
+}
+
+# print the pid recorded in PID_FILE_PATH, only if it is still one of our live JVMs
+live_pid_file_pids(){
+    if [ "x${PID_FILE_PATH}" == "x" ] || [ ! -f "${PID_FILE_PATH}" ]; then return 0; fi
+    local pid_in_file=`cat ${PID_FILE_PATH} 2>/dev/null`
+    if [ "x${pid_in_file}" == "x" ]; then return 0; fi
+    if [ -z "`${JPS} -q 2>/dev/null | grep -w ${pid_in_file}`" ]; then return 0; fi
+    if alive_pid ${pid_in_file}; then echo ${pid_in_file}; fi
+}
+
+# the single entry point for "which pids count as running"
+running_pids(){
+    if [ "x${PID_FILE_PATH}" != "x" ]; then
+        live_pid_file_pids
+    else
+        live_class_pids "$1"
+    fi
+}
+
 # check if the process still in jvm
 status_class(){
-    local p=""
-    if [ "x"${PID_FILE_PATH} != "x" ]; then
-      if [ -f ${PID_FILE_PATH} ]; then
-        local pid_in_file=`cat ${PID_FILE_PATH} 2>/dev/null`
-        if [ "x"${pid_in_file} !=  "x" ]; then
-          p=`${JPS} -q | grep ${pid_in_file} | awk '{print $1}'`
-        fi
-      fi
-    else
-      p=`${JPS} -l | grep "$2" | awk '{print $1}'`
-    fi
+    local p=`running_pids "$2"`
     if [ -n "$p" ]; then
         # echo "$1 ($2) is still running with pid $p"
         return 0
@@ -178,7 +215,8 @@ wait_for_startup(){
         sleep ${SLEEP_TIMEREVAL_S}
         now_s=`date '+%s'`
     done
-    exit 1
+    # return 而非 exit，否则 start_m 里的超时分支是死代码
+    return 1
 }
 
 wait_for_stop(){
@@ -215,26 +253,19 @@ start_m(){
 }
 
 stop_m(){
-    local p=""
-    if [ "x"${PID_FILE_PATH} != "x" ]; then
-      if [ -f ${PID_FILE_PATH} ]; then
-        local pid_in_file=`cat ${PID_FILE_PATH} 2>/dev/null`
-        if [ "x"${pid_in_file} !=  "x" ]; then
-          p=`${JPS} -q | grep ${pid_in_file} | awk '{print $1}'`
-        fi
-      fi
-    else
-      p=`${JPS} -l | grep "${MAIN_CLASS}" | awk '{print $1}'`
-    fi
+    local p=`running_pids ${MAIN_CLASS}`
     if [ -z "${p}" ]; then
         LOG INFO "${FRIEND_NAME} didn't start successfully, not found in the java process table"
         return 0
     fi
-    LOG INFO "Killing ${FRIEND_NAME} (pid ${p}) ..."
-    case "`uname`" in
-        CYCGWIN*) taskkill /PID "${p}" ;;
-        *) kill -SIGTERM "${p}" ;;
-    esac
+    local pid
+    for pid in ${p}; do
+        LOG INFO "Killing ${FRIEND_NAME} (pid ${pid}) ..."
+        case "`uname`" in
+            CYCGWIN*) taskkill /PID "${pid}" ;;
+            *) kill -SIGTERM "${pid}" ;;
+        esac
+    done
     LOG INFO "Waiting ${FRIEND_NAME} to stop complete ..."
     wait_for_stop 20
     if [ $? -eq 0 ]; then
@@ -247,26 +278,19 @@ stop_m(){
 }
 
 shutdown_m(){
-    local p=""
-    if [ "x"${PID_FILE_PATH} != "x" ]; then
-      if [ -f ${PID_FILE_PATH} ]; then
-        local pid_in_file=`cat ${PID_FILE_PATH} 2>/dev/null`
-        if [ "x"${pid_in_file} !=  "x" ]; then
-          p=`${JPS} -q | grep ${pid_in_file} | awk '{print $1}'`
-        fi
-      fi
-    else
-      p=`${JPS} -l | grep "${MAIN_CLASS}" | awk '{print $1}'`
-    fi
+    local p=`running_pids ${MAIN_CLASS}`
     if [ -z "${p}" ]; then
          LOG INFO "${FRIEND_NAME} didn't start successfully, not found in the java process table"
         return 0
     fi
-    LOG INFO "Killing ${FRIEND_NAME} (pid ${p}) ..."
-    case "`uname`" in
-        CYCGWIN*) taskkill /F /PID "${p}" ;;
-        *) kill -9 "${p}" ;;
-    esac
+    local pid
+    for pid in ${p}; do
+        LOG INFO "Killing ${FRIEND_NAME} (pid ${pid}) ..."
+        case "`uname`" in
+            CYCGWIN*) taskkill /F /PID "${pid}" ;;
+            *) kill -9 "${pid}" ;;
+        esac
+    done
 }
 
 restart_m(){
