@@ -48,15 +48,19 @@ public class ExecutorJobHandler extends IJobHandler {
 
         int exitValue = -1;
         Thread errThread = null;
-        String tmpFilePath;
         LogStatistics logStatistics = null;
         //Generate JSON temporary file
-        tmpFilePath = generateTemJsonFile(trigger.getJobJson());
+        String tmpFilePath = generateTemJsonFile(trigger.getJobJson());
+        Process process = null;
+        String prcsId = null;
 
         try {
             String[] cmdarrayFinal = buildDataXExecutorCmd(trigger, tmpFilePath, dataXPyPath, pythonPath);
-            final Process process = Runtime.getRuntime().exec(cmdarrayFinal);
-            String prcsId = ProcessUtil.getProcessId(process);
+            process = Runtime.getRuntime().exec(cmdarrayFinal);
+            // 两条日志流要先取出来赋给 final 局部变量：process 本身在 finally 里还要用，不再是 effectively final
+            final InputStream stdout = process.getInputStream();
+            final InputStream stderr = process.getErrorStream();
+            prcsId = ProcessUtil.getProcessId(process);
             JobLogger.log("------------------DataX process id: " + prcsId);
             jobTmpFiles.put(prcsId, tmpFilePath);
             //update datax process id
@@ -64,13 +68,13 @@ public class ExecutorJobHandler extends IJobHandler {
             ProcessCallbackThread.pushCallBack(prcs);
             // log-thread
             Thread futureThread = null;
-            FutureTask<LogStatistics> futureTask = new FutureTask<>(() -> analysisStatisticsLog(new BufferedInputStream(process.getInputStream())));
+            FutureTask<LogStatistics> futureTask = new FutureTask<>(() -> analysisStatisticsLog(new BufferedInputStream(stdout)));
             futureThread = new Thread(futureTask);
             futureThread.start();
 
             errThread = new Thread(() -> {
                 try {
-                    analysisStatisticsLog(new BufferedInputStream(process.getErrorStream()));
+                    analysisStatisticsLog(new BufferedInputStream(stderr));
                 } catch (IOException e) {
                     JobLogger.log(e);
                 }
@@ -88,30 +92,46 @@ public class ExecutorJobHandler extends IJobHandler {
             if (errThread != null && errThread.isAlive()) {
                 errThread.interrupt();
             }
+            // 没跑到 waitFor 就说明本任务被打断/超时/异常了。DataX 子进程不会自己退出，
+            // 留着它 = 后台继续往目标表写同一批数据（社区 #348 里"同一个任务被执行两次"的数据面根因）
+            if (exitValue == -1 && prcsId != null && !"-1".equals(prcsId)) {
+                JobLogger.log("------------------DataX job interrupted, killing process " + prcsId);
+                try {
+                    ProcessUtil.killProcessByPid(prcsId);
+                } catch (Exception e) {
+                    JobLogger.log("kill datax process fail: " + e.getMessage());
+                }
+            }
+            if (process != null) {
+                process.destroy();
+            }
+            if (prcsId != null) {
+                jobTmpFiles.remove(prcsId);
+            }
             //  删除临时文件
             if (FileUtil.exist(tmpFilePath)) {
                 FileUtil.del(new File(tmpFilePath));
             }
         }
         if (exitValue == 0) {
-            return new ReturnT<>(200, logStatistics.toString());
+            return new ReturnT<>(200, logStatistics != null ? logStatistics.toString() : "datax exit 0, statistics log not parsed");
         } else {
-            return new ReturnT<>(IJobHandler.FAIL.getCode(), "command exit value(" + exitValue + ") is failed");
+            return new ReturnT<>(IJobHandler.FAIL.getCode(), "command exit value(" + exitValue + ") is failed"
+                    + (logStatistics != null ? ", " + logStatistics.toString() : ""));
         }
     }
 
 
 
     private String generateTemJsonFile(String jobJson) {
-        String tmpFilePath;
+        // 原先这里回写注入字段 jsonPath：handler 是跨 JobThread 共享的单例，并发执行会互相改路径
         String dataXHomePath = SystemUtils.getDataXHomePath();
-        if (StringUtils.isNotEmpty(dataXHomePath)) {
-            jsonPath = dataXHomePath + DEFAULT_JSON;
+        String jsonDir = StringUtils.isNotEmpty(dataXHomePath) ? dataXHomePath + DEFAULT_JSON : jsonPath;
+        if (!FileUtil.exist(jsonDir)) {
+            FileUtil.mkdir(jsonDir);
         }
-        if (!FileUtil.exist(jsonPath)) {
-            FileUtil.mkdir(jsonPath);
-        }
-        tmpFilePath = jsonPath + "jobTmp-" + IdUtil.simpleUUID() + ".conf";
+        // 配置的 jsonpath 不带结尾分隔符，直接字符串拼接会生成 "…/data/jsonjobTmp-xxx.conf"
+        String tmpFilePath = new File(jsonDir, "jobTmp-" + IdUtil.simpleUUID() + ".conf").getAbsolutePath();
         // 根据json写入到临时本地文件
         try (PrintWriter writer = new PrintWriter(tmpFilePath, "UTF-8")) {
             writer.println(jobJson);
