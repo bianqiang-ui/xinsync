@@ -89,8 +89,10 @@ public interface JobService {
 
     /**
      * batch add
-     * @param dto
+     *
+     * @param userId 建出来这一批任务的归属（调用者）。模板带着自己的 user_id，
+     *               不显式覆盖的话普通用户批量建的任务自己改不了
      * @return
      */
-    ReturnT<String> batchAdd(DataXBatchJsonBuildDto dto) throws IOException;
+    ReturnT<String> batchAdd(DataXBatchJsonBuildDto dto, int userId) throws IOException;
 }

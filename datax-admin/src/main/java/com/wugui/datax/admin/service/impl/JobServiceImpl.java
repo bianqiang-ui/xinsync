@@ -406,7 +406,7 @@ public class JobServiceImpl implements JobService {
 
 
     @Override
-    public ReturnT<String> batchAdd(DataXBatchJsonBuildDto dto) throws IOException {
+    public ReturnT<String> batchAdd(DataXBatchJsonBuildDto dto, int userId) throws IOException {
 
         String key = "system_please_choose";
         List<String> rdTables = dto.getReaderTables();
@@ -419,6 +419,14 @@ public class JobServiceImpl implements JobService {
         }
         if (rdTables.size() != wrTables.size()) {
             return new ReturnT<>(ReturnT.FAIL_CODE, I18nUtil.getString("json_build_inconsistent_number_r_w_tables"));
+        }
+
+        // 模板先取一次并校验：原先在循环里 loadById，模板不存在时第一条就 NPE，
+        // 而"跑到第 N 条才发现"会留下已经建好的前 N-1 个任务（部分成功，最难查的那种）
+        JobTemplate jobTemplate = jobTemplateMapper.loadById(dto.getTemplateId());
+        if (jobTemplate == null) {
+            return new ReturnT<>(ReturnT.FAIL_CODE, I18nUtil.getString("jobinfo_field_id")
+                    + I18nUtil.getString("system_not_found") + "，templateId = " + dto.getTemplateId());
         }
 
         DataXJsonBuildDto jsonBuild = new DataXJsonBuildDto();
@@ -448,9 +456,10 @@ public class JobServiceImpl implements JobService {
 
             String json = dataxJsonService.buildJobJson(jsonBuild);
 
-            JobTemplate jobTemplate = jobTemplateMapper.loadById(dto.getTemplateId());
             JobInfo jobInfo = new JobInfo();
             BeanUtils.copyProperties(jobTemplate, jobInfo);
+            // 放在 copyProperties 之后：模板里的 user_id 会被一起拷过来，必须在覆盖成调用者之后再落库
+            jobInfo.setUserId(userId);
             jobInfo.setJobJson(json);
             jobInfo.setJobDesc(rdTables.get(i));
             jobInfo.setAddTime(new Date());

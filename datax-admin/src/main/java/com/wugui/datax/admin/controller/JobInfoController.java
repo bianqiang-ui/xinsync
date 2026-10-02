@@ -128,7 +128,14 @@ public class JobInfoController extends BaseController{
 
     @PostMapping(value = "/trigger")
     @ApiOperation("触发任务")
-    public ReturnT<String> triggerJob(@RequestBody TriggerJobDto dto) {
+    public ReturnT<String> triggerJob(HttpServletRequest request, @RequestBody TriggerJobDto dto) {
+        // 手动触发和"改配置"同权：不判归属的话，任何登录用户都能按 jobId 把别人的作业跑一遍，
+        // 效果是直接往别人的目标表写数 —— 比改配置更直接。
+        JobInfo exists = jobInfoMapper.loadById(dto.getJobId());
+        ReturnT<String> deny = denyUnlessCanOperate(exists, request);
+        if (deny != null) {
+            return deny;
+        }
         // force cover job param
         String executorParam=dto.getExecutorParam();
         if (executorParam == null) {
@@ -161,10 +168,13 @@ public class JobInfoController extends BaseController{
 
     @PostMapping("/batchAdd")
     @ApiOperation("批量创建任务")
-    public ReturnT<String> batchAdd(@RequestBody DataXBatchJsonBuildDto dto) throws IOException {
+    public ReturnT<String> batchAdd(HttpServletRequest request, @RequestBody DataXBatchJsonBuildDto dto) throws IOException {
         if (dto.getTemplateId() ==0) {
             return new ReturnT<>(ReturnT.FAIL_CODE, (I18nUtil.getString("system_please_choose") + I18nUtil.getString("jobinfo_field_temp")));
         }
-        return jobService.batchAdd(dto);
+        // 归属必须落在调用者身上：这一条走的是模板复制，模板带着谁的 user_id，建出来的一整批就归谁。
+        // 写路径已开始判归属之后，不 stamp 的后果是"普通用户批量建的任务自己改不了"。
+        Integer currentUserId = getCurrentUserId(request);
+        return jobService.batchAdd(dto, currentUserId == null ? 0 : currentUserId.intValue());
     }
 }

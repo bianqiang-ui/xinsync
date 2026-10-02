@@ -27,20 +27,35 @@ public class I18nUtil {
         if (prop != null) {
             return prop;
         }
-        try {
-            // build i18n prop
-            String i18n = JobAdminConfig.getAdminConfig().getI18n();
-            i18n = (i18n!=null && i18n.trim().length()>0)?("_"+i18n):i18n;
-            String i18nFile = MessageFormat.format("i18n/message{0}.properties", i18n);
+        // build i18n prop
+        // JobAdminConfig 是 Spring 才初始化的静态单例，非 Spring 环境（单测、启动早期）取它是 NPE，
+        // 而本方法是所有失败提示文案的入口 —— 等于"报错比被报的错先炸"。拿不到配置就按默认语言走。
+        JobAdminConfig adminConfig = JobAdminConfig.getAdminConfig();
+        String i18n = adminConfig == null ? null : adminConfig.getI18n();
+        String suffix = (i18n != null && i18n.trim().length() > 0) ? ("_" + i18n.trim()) : "";
 
-            // load prop
-            Resource resource = new ClassPathResource(i18nFile);
-            EncodedResource encodedResource = new EncodedResource(resource,"UTF-8");
-            prop = PropertiesLoaderUtils.loadProperties(encodedResource);
-        } catch (IOException e) {
-            logger.error(e.getMessage(), e);
+        prop = loadPropFile(suffix);
+        if (prop == null && !suffix.isEmpty()) {
+            // 配置指定的语言文件不存在时退回默认文件，别让文案层整体变 null
+            prop = loadPropFile("");
+        }
+        if (prop == null) {
+            logger.error("i18n message{}.properties 加载失败，提示信息将退回空文案。", suffix);
+            prop = new Properties();
         }
         return prop;
+    }
+
+    private static Properties loadPropFile(String suffix) {
+        String i18nFile = MessageFormat.format("i18n/message{0}.properties", suffix);
+        try {
+            Resource resource = new ClassPathResource(i18nFile);
+            EncodedResource encodedResource = new EncodedResource(resource,"UTF-8");
+            return PropertiesLoaderUtils.loadProperties(encodedResource);
+        } catch (IOException e) {
+            logger.error(e.getMessage(), e);
+            return null;
+        }
     }
 
     /**
