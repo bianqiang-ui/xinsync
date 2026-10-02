@@ -8,6 +8,7 @@ import com.wugui.datax.admin.entity.JobRegistry;
 import com.wugui.datax.admin.mapper.JobGroupMapper;
 import com.wugui.datax.admin.mapper.JobInfoMapper;
 import com.wugui.datax.admin.mapper.JobRegistryMapper;
+import com.wugui.datax.admin.security.AccessControl;
 import io.swagger.annotations.Api;
 import io.swagger.annotations.ApiOperation;
 import io.swagger.annotations.ApiParam;
@@ -41,6 +42,12 @@ public class JobGroupController {
     @ApiOperation("新建执行器")
     public ReturnT<String> save(@RequestBody JobGroup jobGroup) {
 
+        // 执行器组是平台基础设施：手动录入的地址会被调度器直接发起请求（并带上 accessToken），
+        // 所以新增/修改/删除只允许管理员，普通用户仍可只读列表。
+        ReturnT<String> denied = AccessControl.requireAdmin();
+        if (denied != null) {
+            return denied;
+        }
         // valid
         if (jobGroup.getAppName() == null || jobGroup.getAppName().trim().length() == 0) {
             return new ReturnT<String>(500, (I18nUtil.getString("system_please_input") + "AppName"));
@@ -70,6 +77,10 @@ public class JobGroupController {
     @PostMapping("/update")
     @ApiOperation("更新执行器")
     public ReturnT<String> update(@RequestBody JobGroup jobGroup) {
+        ReturnT<String> denied = AccessControl.requireAdmin();
+        if (denied != null) {
+            return denied;
+        }
         // valid
         if (jobGroup.getAppName() == null || jobGroup.getAppName().trim().length() == 0) {
             return new ReturnT<String>(500, (I18nUtil.getString("system_please_input") + "AppName"));
@@ -135,7 +146,10 @@ public class JobGroupController {
     @PostMapping("/remove")
     @ApiOperation("移除执行器")
     public ReturnT<String> remove(int id) {
-
+        ReturnT<String> denied = AccessControl.requireAdmin();
+        if (denied != null) {
+            return denied;
+        }
         // valid
         int count = jobInfoMapper.pageListCount(0, 10, id, -1, null, null, 0,null);
         if (count > 0) {

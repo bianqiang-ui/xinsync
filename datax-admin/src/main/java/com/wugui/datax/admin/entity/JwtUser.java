@@ -1,5 +1,6 @@
 package com.wugui.datax.admin.entity;
 
+import com.wugui.datax.admin.security.AccessControl;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -25,7 +26,9 @@ public class JwtUser implements UserDetails {
         id = user.getId();
         username = user.getUsername();
         password = user.getPassword();
-        authorities = Collections.singleton(new SimpleGrantedAuthority(user.getRole()));
+        // job_user.role 是可空列，而 SimpleGrantedAuthority 不接受空串——历史上 role 没填的账号会直接在登录时抛异常。
+        // 归一化统一走 AccessControl：缺省按最小权限当普通用户，老口径的 '1' 翻成 ROLE_ADMIN。
+        authorities = Collections.singleton(new SimpleGrantedAuthority(AccessControl.normalizeRole(user.getRole())));
     }
 
     @Override

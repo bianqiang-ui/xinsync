@@ -5,6 +5,7 @@ import com.wugui.datatx.core.biz.model.ReturnT;
 import com.wugui.datax.admin.core.util.I18nUtil;
 import com.wugui.datax.admin.entity.JobUser;
 import com.wugui.datax.admin.mapper.JobUserMapper;
+import com.wugui.datax.admin.security.AccessControl;
 import io.swagger.annotations.Api;
 import io.swagger.annotations.ApiOperation;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
@@ -85,6 +86,10 @@ public class UserController {
     @ApiOperation("添加用户")
     public ReturnT<String> add(@RequestBody JobUser jobUser) {
 
+        ReturnT<String> denied = AccessControl.requireAdmin();
+        if (denied != null) {
+            return denied;
+        }
         // valid username
         if (!StringUtils.hasText(jobUser.getUsername())) {
             return new ReturnT<>(FAIL_CODE, I18nUtil.getString("system_please_input") + I18nUtil.getString("user_username"));
@@ -118,6 +123,10 @@ public class UserController {
     @PostMapping(value = "/update")
     @ApiOperation("更新用户信息")
     public ReturnT<String> update(@RequestBody JobUser jobUser) {
+        ReturnT<String> denied = AccessControl.requireAdmin();
+        if (denied != null) {
+            return denied;
+        }
         if (StringUtils.hasText(jobUser.getUsername())) {
             String username = jobUser.getUsername().trim();
             if (!USERNAME_PATTERN.matcher(username).matches()) {
@@ -146,6 +155,10 @@ public class UserController {
     @RequestMapping(value = "/remove", method = RequestMethod.POST)
     @ApiOperation("删除用户")
     public ReturnT<String> remove(int id) {
+        ReturnT<String> denied = AccessControl.requireAdmin();
+        if (denied != null) {
+            return denied;
+        }
         int result = jobUserMapper.delete(id);
         return result != 1 ? ReturnT.FAIL : ReturnT.SUCCESS;
     }
@@ -153,6 +166,11 @@ public class UserController {
     @PostMapping(value = "/updatePwd")
     @ApiOperation("修改密码")
     public ReturnT<String> updatePwd(@RequestBody JobUser jobUser) {
+        // 这个接口原先只按请求体里的 username 定位用户，任何登录用户都能把 admin 的密码改掉
+        ReturnT<String> denied = AccessControl.requireSelfOrAdmin(jobUser.getUsername());
+        if (denied != null) {
+            return denied;
+        }
         String password = jobUser.getPassword();
         if (password == null || password.trim().length() == 0) {
             return new ReturnT<>(ReturnT.FAIL.getCode(), "密码不可为空");
