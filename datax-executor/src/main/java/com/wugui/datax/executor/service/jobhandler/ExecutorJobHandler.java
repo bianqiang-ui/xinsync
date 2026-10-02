@@ -79,9 +79,11 @@ public class ExecutorJobHandler extends IJobHandler {
                     JobLogger.log(e);
                 }
             });
+            // stderr 必须赶在阻塞等 stdout 结果之前就开始读：子进程写满管道缓冲（Linux 默认 64KB）后会
+            // 阻塞在 write(stderr) 上，而主线程正卡在 futureTask.get() 等它的 stdout 结束标记 —— 互相等死（社区 #487）。
+            errThread.start();
 
             logStatistics = futureTask.get();
-            errThread.start();
             // process-wait
             exitValue = process.waitFor();      // exit code: 0=success, 1=error
             // log-thread join
