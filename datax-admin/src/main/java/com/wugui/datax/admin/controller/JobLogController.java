@@ -11,6 +11,7 @@ import com.wugui.datax.admin.entity.JobInfo;
 import com.wugui.datax.admin.entity.JobLog;
 import com.wugui.datax.admin.mapper.JobInfoMapper;
 import com.wugui.datax.admin.mapper.JobLogMapper;
+import com.wugui.datax.admin.security.AccessControl;
 import io.swagger.annotations.Api;
 import io.swagger.annotations.ApiOperation;
 import org.slf4j.Logger;
@@ -18,6 +19,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.web.bind.annotation.*;
 
 import javax.annotation.Resource;
+import javax.servlet.http.HttpServletRequest;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
@@ -29,7 +31,7 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/log")
 @Api(tags = "任务运行日志接口")
-public class JobLogController {
+public class JobLogController extends BaseController {
     private static Logger logger = LoggerFactory.getLogger(JobLogController.class);
 
     @Resource
@@ -103,12 +105,22 @@ public class JobLogController {
 
     @RequestMapping(value = "/logKill", method = RequestMethod.POST)
     @ApiOperation("kill任务")
-    public ReturnT<String> logKill(int id) {
+    public ReturnT<String> logKill(HttpServletRequest request, int id) {
         // base check
+        // 原先是 load(id) 之后立刻 log.getJobId()：传一个不存在的 logId 就是 NPE，
+        // 对外表现为 500 而不是"这条执行记录不存在"。
         JobLog log = jobLogMapper.load(id);
+        if (log == null) {
+            return new ReturnT<>(500, "执行记录不存在，logId = " + id);
+        }
         JobInfo jobInfo = jobInfoMapper.loadById(log.getJobId());
         if (jobInfo == null) {
             return new ReturnT<>(500, I18nUtil.getString("jobinfo_glue_jobid_invalid"));
+        }
+        // 终止别人正在跑的任务同样是越权面：归属以库里那条任务为准
+        String deny = AccessControl.denyUnlessAdminOrOwner(jobInfo.getUserId(), getCurrentUserId(request));
+        if (deny != null) {
+            return new ReturnT<>(500, deny);
         }
         if (ReturnT.SUCCESS_CODE != log.getTriggerCode()) {
             return new ReturnT<>(500, I18nUtil.getString("joblog_kill_log_limit"));
@@ -138,6 +150,12 @@ public class JobLogController {
     @PostMapping("/clearLog")
     @ApiOperation("清理日志")
     public ReturnT<String> clearLog(int jobGroup, int jobId, int type) {
+        // 清日志是**不可回滚的批量删除**，type=9 是直接清全库；这种面必须管理员专属，
+        // 普通用户误触（或脚本乱调）就把别人的运行痕迹全没了。
+        ReturnT<String> deny = AccessControl.requireAdmin();
+        if (deny != null) {
+            return deny;
+        }
 
         Date clearBeforeTime = null;
         int clearBeforeNum = 0;
