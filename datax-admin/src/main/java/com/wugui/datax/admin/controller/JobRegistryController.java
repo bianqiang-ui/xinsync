@@ -1,12 +1,10 @@
 package com.wugui.datax.admin.controller;
 
-import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.api.R;
 import com.wugui.datax.admin.entity.JobRegistry;
 import com.wugui.datax.admin.service.JobRegistryService;
-import com.wugui.datax.admin.util.PageUtils;
 import io.swagger.annotations.Api;
 import io.swagger.annotations.ApiImplicitParam;
 import io.swagger.annotations.ApiImplicitParams;
@@ -15,8 +13,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
-
-import java.util.Map;
 
 /**
  * Created by jingwk on 2019/11/17
@@ -45,46 +41,11 @@ public class JobRegistryController extends BaseController {
 			})
 	public R<IPage<JobRegistry>> selectAll() {
 		BaseForm baseForm = new BaseForm();
-		return success(this.jobRegistryService.page(baseForm.getPlusPagingQueryEntity(), pageQueryWrapperCustom(baseForm.getParameters())));
-	}
-
-	/**
-	 * 自定义查询组装
-	 *
-	 * @param map
-	 * @return
-	 */
-	protected QueryWrapper<JobRegistry> pageQueryWrapperCustom(Map<String, Object> map) {
-		// mybatis plus 分页相关的参数
-		Map<String, Object> pageHelperParams = PageUtils.filterPageParams(map);
-		//过滤空值，分页查询相关的参数
-		Map<String, Object> columnQueryMap = PageUtils.filterColumnQueryParams(map);
-
-		QueryWrapper<JobRegistry> queryWrapper = new QueryWrapper<>();
-
-		//排序 操作
-		pageHelperParams.forEach((k, v) -> {
-			switch (k) {
-				case "ascs":
-					queryWrapper.orderByAsc(StrUtil.toUnderlineCase(StrUtil.toString(v)));
-					break;
-				case "descs":
-					queryWrapper.orderByDesc(StrUtil.toUnderlineCase(StrUtil.toString(v)));
-					break;
-			}
-		});
-
-		//遍历进行字段查询条件组装
-		columnQueryMap.forEach((k, v) -> {
-			switch (k) {
-				case "datasourceName":
-					queryWrapper.like(StrUtil.toUnderlineCase(k), v);
-					break;
-				default:
-					queryWrapper.eq(StrUtil.toUnderlineCase(k), v);
-			}
-		});
-
-		return queryWrapper;
+		// 原先这里把 BaseForm 的组装逻辑抄了一遍，于是排序字段的白名单也得抄两遍：
+		// 收敛到同一个实现处，注入判定只有一处可改。
+		QueryWrapper<JobRegistry> query = (QueryWrapper<JobRegistry>) baseForm.pageQueryWrapperCustom(
+				baseForm.getParameters(), new QueryWrapper<JobRegistry>());
+		return success(this.jobRegistryService.page(baseForm.getPlusPagingQueryEntity(), query));
 	}
 }
+
