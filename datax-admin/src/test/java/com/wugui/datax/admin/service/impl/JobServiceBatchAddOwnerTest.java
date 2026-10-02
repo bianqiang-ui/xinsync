@@ -95,6 +95,28 @@ public class JobServiceBatchAddOwnerTest {
         verify(jobInfoMapper, never()).save(any(JobInfo.class));
     }
 
+    /**
+     * 批次 10-F：模板带 jvmParam，copyProperties 会把它原样拷进每一个新建任务。
+     *
+     * 这道口子不判，add/update 上的作业参数校验就白做了 —— 一次批量能建出一整批带
+     * 命令注入载荷的任务（这些参数最终被拼进 datax.py 的命令行，而 datax.py 收尾是
+     * Popen(cmd, shell=True)）。这里钉的是"在建任何东西之前就拒"，不能建到一半才发现。
+     */
+    @Test
+    public void templateCarryingShellPayloadFailsBeforeAnyJobIsCreated() throws Exception {
+        JobTemplate dirty = template(TEMPLATE_OWNER_ID);
+        dirty.setJvmParam("-Xmx1g `touch /tmp/pwned`");
+        when(jobTemplateMapper.loadById(TEMPLATE_ID)).thenReturn(dirty);
+
+        ReturnT<String> result = service.batchAdd(dto("t_order_1", "t_order_2"), CALLER_USER_ID);
+
+        assertFalse("模板 JVM 参数带反引号（shell 命令替换）必须拒收：" + result.getMsg(),
+                result.getCode() == ReturnT.SUCCESS_CODE);
+        assertTrue("失败信息要指明是命令注入风险：" + result.getMsg(),
+                result.getMsg().contains("命令注入风险"));
+        verify(jobInfoMapper, never()).save(any(JobInfo.class));
+    }
+
     private JobTemplate template(int userId) {
         JobTemplate template = new JobTemplate();
         template.setId(TEMPLATE_ID);
