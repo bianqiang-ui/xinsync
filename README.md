@@ -13,6 +13,11 @@
   <img src="https://img.shields.io/badge/信创-适配-red.svg" alt="信创">
 </p>
 
+<p align="center">
+  <a href="https://github.com/bianqiang-ui/datax-web">📦 GitHub</a> ·
+  <a href="https://gitee.com/brian888/xinsync">📦 Gitee（国内镜像）</a>
+</p>
+
 ---
 
 ## 📖 项目简介
