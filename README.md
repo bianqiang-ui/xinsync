@@ -275,7 +275,8 @@ chore:    构建/工具变更
 ## 📞 联系我们
 
 - **GitHub Issues**：[提交问题](https://github.com/bianqiang-ui/datax-web/issues)
-- **微信**：扫描上方赞赏码添加
+- **微信**：`13898886628`（添加时请注明 GitHub / Gitee）
+- **邮箱**：bianqiang@gmail.com
 
 ---
 
