@@ -154,8 +154,14 @@ public class JwtAuthFailurePathTest {
     }
 
     /**
-     * ProviderManager 不接受空的 provider 列表（构造期就校验），而这三条用例根本不该走到认证环节 ——
-     * 所以给一个"一被调用就失败"的 provider，正好把"未认证路径不许继续往下走"变成可断言的事实。
+     * ProviderManager 不接受空的 provider 列表（构造期就校验），所以必须给一个。
+     *
+     * 说清楚它并不能当断言用：父类 BasicAuthenticationFilter 只有在 Authorization 头以
+     * "Basic " 开头时才会调 authenticationManager，而本过滤器只在头以 "Bearer " 开头时才
+     * 走到 super.doFilterInternal（见 JWTAuthorizationFilter:41 的提前 return），两者互斥 ——
+     * 这条路径上 manager 根本不可达。换句话说："token 无效不继续往下走"是由下面各用例里的
+     * 401 状态码 + chain 未被调用钉住的，不是由这个 provider 钉住的。
+     * 保留它只是为了满足构造期校验，同时留一个"真有人改出 Basic 分支就会立刻炸给我看"的哨兵。
      */
     private JWTAuthorizationFilter newFilter() {
         AuthenticationProvider mustNotBeUsed = new AuthenticationProvider() {

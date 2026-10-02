@@ -1,6 +1,7 @@
 package com.wugui.datatx.core.util;
 
 import com.wugui.datatx.core.biz.model.TriggerParam;
+import com.wugui.datatx.core.enums.IncrementTypeEnum;
 import org.apache.commons.lang3.StringUtils;
 
 import java.text.SimpleDateFormat;
@@ -29,6 +30,16 @@ import java.text.SimpleDateFormat;
  * 只禁"双引号内依旧会被 shell 解释"的字符。<code>&lt;</code> <code>&gt;</code>
  * <code>;</code> <code>&amp;</code> 在双引号里是普通字面量，而用户的 WHERE 条件
  * （<code>id&gt;=%s</code>）本来就常用它们；把合法写法一并禁掉属于守卫过宽。
+ *
+ * <h2>判定条件跟着 incrementType 走，且按"执行器实际吃进去的那串"判</h2>
+ * 这四个字段里后三个只有对上特定增量类型才会被拼进命令行：时间增量用
+ * <code>replaceParam</code> + <code>replaceParamType</code>，主键增量只用
+ * <code>replaceParam</code>，HIVE 分区只用 <code>partitionInfo</code>；
+ * <code>jvmParam</code> 则任何时候都用。拿不相干的字段去拒一个任务是守卫过宽
+ * （典型误伤：任务用自增主键，但表里残留着一段早就没人用的 partition_info）。
+ * 反过来，执行器怎么切分、怎么 trim、怎么比较，这里就怎么判 —— 两边口径不一致会出
+ * "绿灯放行、红灯炸在 parseInt"这种最难查的组合，所以 trim 后的片段才是判定对象
+ * （执行器侧同步改成 trim，见 datax-executor 的 BuildCommand）。
  */
 public final class JobParamSafety {
 
@@ -38,9 +49,10 @@ public final class JobParamSafety {
     /**
      * 增量时间格式里"不走日期样式"的那个取值。
      *
-     * 比较方式严格照抄 BuildCommand 里的 <code>replaceParamType.equals("Timestamp")</code>
-     * —— 连大小写一起照抄。判得比执行器宽松没有意义：执行器认为不是 Timestamp 的串，
-     * 就会拿它去 new SimpleDateFormat，非法样式照样炸。
+     * 比较方式跟着 BuildCommand 走：那边现在是 trim 之后再与 "Timestamp" 比较（历史上直接拿
+     * 原始串 equals，于是 " Timestamp " 会被当成日期样式去 new SimpleDateFormat，用户看着没填错
+     * 却任务失败）。这里同样先 trim，且连大小写一起照抄 —— 判得比执行器宽松没有意义，
+     * 执行器认为不是 Timestamp 的串就会喂给 SimpleDateFormat。
      */
     private static final String TIMESTAMP_TYPE = "Timestamp";
 
@@ -48,7 +60,7 @@ public final class JobParamSafety {
     }
 
     /**
-     * 执行器侧入口： TriggerParam 上就是那四个字段，直接取。
+     * 执行器侧入口： TriggerParam 上就是那四个字段 + 增量类型，直接取。
      *
      * @return 放行返回 null；拒绝返回可直接写进任务日志/回给前端的文案
      */
@@ -57,25 +69,57 @@ public final class JobParamSafety {
             return null;
         }
         return denyMessage(tgParam.getJvmParam(), tgParam.getReplaceParam(),
-                tgParam.getReplaceParamType(), tgParam.getPartitionInfo());
+                tgParam.getReplaceParamType(), tgParam.getPartitionInfo(), tgParam.getIncrementType());
     }
 
     /**
+     * @param incrementType 决定后三个字段里哪几个会被执行器拼进命令行；null 或 0 表示都不拼
      * @return 放行返回 null；拒绝返回可直接写进任务日志/回给前端的文案
      */
     public static String denyMessage(String jvmParam, String replaceParam,
-                                     String replaceParamType, String partitionInfo) {
+                                     String replaceParamType, String partitionInfo,
+                                     Integer incrementType) {
+        // jvmParam 无条件进 -j"..."，与增量类型无关
         String deny = checkShellChars("JVM 参数", jvmParam);
-        if (deny == null) {
+        if (deny != null) {
+            return deny;
+        }
+        if (isTimeIncrement(incrementType)) {
             deny = checkShellChars("增量替换参数", replaceParam);
-        }
-        if (deny == null) {
+            if (deny != null) {
+                return deny;
+            }
             deny = checkTimeFormat("增量时间格式", replaceParamType);
+            if (deny != null) {
+                return deny;
+            }
+        } else if (isIdIncrement(incrementType)) {
+            deny = checkShellChars("增量替换参数", replaceParam);
+            if (deny != null) {
+                return deny;
+            }
         }
-        if (deny == null) {
+        if (isPartitionIncrement(incrementType)) {
             deny = checkPartitionInfo(partitionInfo);
         }
         return deny;
+    }
+
+    /**
+     * 执行器判的是 <code>incrementType != null &amp;&amp; IncrementTypeEnum.TIME.getCode() == incrementType</code>，
+     * 拆箱方向是 int 与 Integer 比较，所以 null 走不到这一支。判定条件与消费条件必须逐字一致，
+     * 否则就成了"绿灯放行、红灯炸在执行器"或者"把根本不进命令行的字段判死"。
+     */
+    private static boolean isTimeIncrement(Integer incrementType) {
+        return incrementType != null && IncrementTypeEnum.TIME.getCode() == incrementType.intValue();
+    }
+
+    private static boolean isIdIncrement(Integer incrementType) {
+        return incrementType != null && IncrementTypeEnum.ID.getCode() == incrementType.intValue();
+    }
+
+    private static boolean isPartitionIncrement(Integer incrementType) {
+        return incrementType != null && IncrementTypeEnum.PARTITION.getCode() == incrementType.intValue();
     }
 
     /** 名字写在拒绝文案里，不回显用户原字符（避免响应里出现可被前端二次渲染的注入串） */
@@ -125,9 +169,16 @@ public final class JobParamSafety {
         if (StringUtils.isBlank(partitionInfo)) {
             return null;
         }
-        String[] parts = partitionInfo.split(",");
-        if (parts.length != 3) {
-            return "分区信息格式应为「分区字段,天数偏移,日期格式」，当前是 " + parts.length + " 段";
+        String[] raw = partitionInfo.split(",");
+        if (raw.length != 3) {
+            return "分区信息格式应为「分区字段,天数偏移,日期格式」，当前是 " + raw.length + " 段";
+        }
+        // 执行器现在按 trim 之后的片段取值，判定也跟着用 trim 后的串：
+        // "ds , 0 , yyyy-MM-dd" 这种带空格的写法本来就是用户手滑的常见形态，
+        // 判成非法属于把能跑的写法判死；判成合法又让执行器去 parseInt(" 0 ")，则是红灯后炸。
+        String[] parts = new String[raw.length];
+        for (int i = 0; i < raw.length; i++) {
+            parts[i] = raw[i].trim();
         }
         String[] labels = {"分区字段", "天数偏移", "日期格式"};
         for (int i = 0; i < parts.length; i++) {
@@ -136,22 +187,20 @@ public final class JobParamSafety {
             }
         }
         try {
-            Integer.parseInt(parts[1].trim());
+            Integer.parseInt(parts[1]);
         } catch (NumberFormatException e) {
-            return "分区信息的天数偏移必须是整数，当前为「" + parts[1].trim() + "」";
+            return "分区信息的天数偏移必须是整数，当前为「" + parts[1] + "」";
         }
-        String deny = denyBadDatePattern("分区信息的日期格式", parts[2]);
-        if (deny != null) {
-            return deny;
-        }
-        // 三段最终都会拼进 -p"..." 那一段命令行（字段名与等号直接拼接），照样要过 shell 字符判定
+        String deny;
+        // 三段最终都会拼进 -p"..." 那一段命令行（字段名与等号直接拼接），先过 shell 字符判定；
+        // 顺序刻意排在日期样式判定之前：样式不合法时判定文案会回显用户原文，而注入串不该进响应体。
         for (int i = 0; i < parts.length; i++) {
             deny = checkShellChars("分区信息的" + labels[i], parts[i]);
             if (deny != null) {
                 return deny;
             }
         }
-        return null;
+        return denyBadDatePattern("分区信息的日期格式", parts[2]);
     }
 
     /**
@@ -159,8 +208,18 @@ public final class JobParamSafety {
      * IllegalArgumentException，任务日志只剩一行堆栈。这里提前判掉。
      *
      * "Timestamp" 是前端下拉里的另一个取值（走毫秒时间戳分支），不是样式，放过。
+     *
+     * <h2>样式本身也是命令行片段，必须过 shell 字符判定</h2>
+     * 反引号、<code>$</code> 这些不是 SimpleDateFormat 的模式字母，会被当成字面量原样留在
+     * <code>sdf.format()</code> 的产出里；那段产出接着进 <code>String.format(replaceParam, ...)</code>
+     * 再进 <code>-p"..."</code>。也就是说"日期格式"这一栏能绕过只判 jvmParam/replaceParam 的校验，
+     * 把命令替换塞进命令行 —— 这是本判定存在之前真实可打通的注入路径，分区信息的日期格式同理。
      */
     private static String checkTimeFormat(String fieldLabel, String pattern) {
+        String deny = checkShellChars(fieldLabel, pattern);
+        if (deny != null) {
+            return deny;
+        }
         if (TIMESTAMP_TYPE.equals(StringUtils.trimToEmpty(pattern))) {
             return null;
         }

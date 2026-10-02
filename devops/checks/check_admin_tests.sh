@@ -22,6 +22,15 @@
 #   8) JwtAuthFailurePathTest —— 接了归属判定之后，"从 token 取调用者 id"成了每个受管接口的必经
 #      步骤：缺头、非 Bearer、签名不符都必须是"没有身份"（null → 最小权限拒绝），不能是 500；
 #      同时钉住正常 token 照样解得出 id、无头请求仍旧交给 Spring Security 兜。
+#   9) OwnerStampNullSafeTest —— 上一轮的收尾缺口：add/insert 三处把 getCurrentUserId 的返回值
+#      直接塞进 setUserId(...)，而 JobInfo/JobTemplate/JobProject 的 userId 是基本类型 int，
+#      null 一拆箱就是 NPE → 500。必须"未登录 = 一条看得懂的拒绝 + 服务层根本不被调"，
+#      同时正向用例钉住"盖章这件事照做"（不盖章，普通用户建的任务自己改不了）。
+#  10) JobServiceUpdateParamTest —— update 与 add 是两条独立路径，历史上并不同步：
+#      日期格式一栏在 update 上没有 shell 字符判定（反引号会经 sdf.format() 进 -p"..."，
+#      而 datax.py 收尾是 Popen(shell=True)），且那段"空白退回 Timestamp"的归一化排在
+#      BeanUtils.copyProperties 之后（改的是源对象，落库的行没动）；判定还必须跟着 incrementType，
+#      否则主键增量的存量任务会被 partition_info 的残留值锁死。
 #
 # 判定标准与 TDSQL 门禁完全一致（同一个 lib）：测试没被编译/没跑起来，本身就判失败。
 set -u
@@ -29,12 +38,21 @@ set -u
 cd "$(dirname "$0")/../.." || exit 1
 . devops/checks/lib_mvn_test_gate.sh
 
-GATE_TESTS="JobDatasourceControllerUpdateTest,JobScheduleHelperMisfireLogTest,BaseQueryToolMaxIdTest,AccessControlTest,JobServiceBatchAddOwnerTest,SqlSafeIdentifierTest,BaseFormOrderByWhitelistTest,JobLogControllerOwnershipTest,JwtAuthFailurePathTest"
+GATE_TESTS="JobDatasourceControllerUpdateTest,JobScheduleHelperMisfireLogTest,BaseQueryToolMaxIdTest,AccessControlTest,JobServiceBatchAddOwnerTest,SqlSafeIdentifierTest,BaseFormOrderByWhitelistTest,JobLogControllerOwnershipTest,JwtAuthFailurePathTest,OwnerStampNullSafeTest,JobServiceUpdateParamTest"
 
 # 上游自带的测试类大多要连真库/真服务，在这个 fork 的门禁环境里跑不了。
 # 但"新写了一个 *Test 却没进任何名单"必须当场 FAIL —— 否则门禁名单会变成静默漏跑的黑名单，
 # 而 recheck 照样全绿（复核时抓到的那条通道就是这么开的）。
+# EXEMPT 里带上"为什么跑不了"，下次接手的人能判断是该修环境还是该删用例。
 EXEMPT_TESTS="AbstractSpringMvcTest AdminBizTest DataxJsonHelperTest ExecutorBizTest Hbase11xsqlToolTest Hbase20xsqlQueryToolTest I18nUtilTest JacksonUtilTest JobGroupMapperTest JobInfoMapperTest JobLogGlueMapperTest JobLogMapperTest JobRegistryMapperTest MySQLQueryToolTest OracleQueryToolTest PostgresqlQueryToolTest SqlServerQueryToolTest"
+# datax-core / datax-rpc 里的上游用例：ExecutorBizImplTest（core）要连正在跑的 admin（9527），
+# IpUtilTest 与 SerializerTest（rpc）要连注册中心/真 RPC 端口 —— 都是集成用例，不进这个离线门禁。
+# 注意 admin 里另有名字相近的 ExecutorBizTest（在上面的名单里），别把它们当成同一个。
+EXEMPT_TESTS="$EXEMPT_TESTS ExecutorBizImplTest IpUtilTest SerializerTest"
+
+# 被扫的模块范围：10-H 之前只扫 datax-admin，新写在 datax-core / datax-executor 的测试类
+# 可以静静不进任何名单而 recheck 全绿 —— 复核时抓到的正是这条通道。
+MODULE_TEST_ROOTS="datax-admin datax-core datax-executor datax-rpc"
 
 # 第三类出口：被别的门禁跑着的测试（例如 TdsqlDdlRewriterTest 由 check_tdsql.sh 执行）。
 # 不手写清单，直接扫 devops/checks/check_*.sh 里有没有出现这个类名 —— 手写会漂，
@@ -52,14 +70,16 @@ covered_by_other_gate() {
 }
 
 uncovered=""
-for name in $(find datax-admin/src/test/java -name '*Test.java' | sed 's#.*/##; s#\.java$##' | sort); do
-  case ",$GATE_TESTS," in *",$name,"*) continue ;; esac
-  case " $EXEMPT_TESTS " in *" $name "*) continue ;; esac
-  if gate=$(covered_by_other_gate "$name"); then
-    echo "OK   ${name} 由 ${gate} 覆盖"
-    continue
-  fi
-  uncovered="$uncovered $name"
+for root in $MODULE_TEST_ROOTS; do
+  for name in $(find "$root/src/test/java" -name '*Test.java' 2>/dev/null | sed 's#.*/##; s#\.java$##' | sort); do
+    case ",$GATE_TESTS," in *",$name,"*) continue ;; esac
+    case " $EXEMPT_TESTS " in *" $name "*) continue ;; esac
+    if gate=$(covered_by_other_gate "$name"); then
+      echo "OK   ${name} 由 ${gate} 覆盖"
+      continue
+    fi
+    uncovered="$uncovered ${root}/${name}"
+  done
 done
 if [ -n "$uncovered" ]; then
   echo "FAIL: 这些测试类既不在门禁名单、不在豁免清单、也没被别的门禁跑到：$uncovered"

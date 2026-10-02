@@ -66,7 +66,13 @@ public class JobTemplateController extends BaseController{
     @PostMapping("/add")
     @ApiOperation("添加任务模板")
     public ReturnT<String> add(HttpServletRequest request, @RequestBody JobTemplate jobTemplate) {
-        jobTemplate.setUserId(getCurrentUserId(request));
+        // 同 JobInfoController#add：JobTemplate.userId 是 int，null 拆箱就是 500；
+        // 批量建任务会按模板的 user_id 落归属（batchAdd），模板没有属主会让整批任务无主。
+        Integer currentUserId = getCurrentUserId(request);
+        if (currentUserId == null) {
+            return new ReturnT<>(ReturnT.FAIL_CODE, AccessControl.NO_LOGIN_MSG);
+        }
+        jobTemplate.setUserId(currentUserId.intValue());
         return jobTemplateService.add(jobTemplate);
     }
 
