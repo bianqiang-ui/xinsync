@@ -14,6 +14,7 @@ import com.wugui.datax.admin.entity.JobDatasource;
 import com.wugui.datax.admin.entity.JobGroup;
 import com.wugui.datax.admin.entity.JobInfo;
 import com.wugui.datax.admin.entity.JobLog;
+import com.wugui.datax.admin.tool.datax.DsSecretPlaceholder;
 import com.wugui.datax.admin.tool.query.BaseQueryTool;
 import com.wugui.datax.admin.tool.query.QueryToolFactory;
 import com.wugui.datax.admin.util.JSONUtils;
@@ -55,10 +56,13 @@ public class JobTrigger {
             String json;
             try {
                 json = JSONUtils.changeJson(jobInfo.getJobJson(), JSONUtils.decrypt);
+                // 新任务的 job_json 里只有 @@DATAX_DS_*@@ 引用，明文在这一行才出现，
+                // 且只出现在即将发往执行器的那份 TriggerParam 里（落库/API/模板三面都不再有凭据）。
+                json = DsSecretPlaceholder.resolveForDispatch(json);
             } catch (Exception e) {
                 // job_json 为空或结构不完整时这里会抛（JSONUtils:59 NPE）。异常原先直接逃进触发线程池，
                 // 日志页一条记录都没有，用户只看到"任务失败了但没有运行日志"（社区 #389 的描述）
-                String reason = "job_json 无法解析（为空或缺少 job/content 结构），无法解密数据源账密：" + e;
+                String reason = "job_json 无法解析，或其中的数据源账密引用还原不了（数据源已删除 / 口令已清空 / 换过 DATAX_AES_KEY），任务未下发：" + e;
                 triggerFailLog(jobInfo, triggerType, reason);
                 return;
             }

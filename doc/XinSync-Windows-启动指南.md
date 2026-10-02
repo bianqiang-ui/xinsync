@@ -24,18 +24,18 @@ Get-NetTCPConnection -LocalPort 3306 -ErrorAction SilentlyContinue
 # 方法二：用客户端连接测试
 ```
 
-**你当前的环境：**
-- ✅ Java 1.8.0_152
-- ✅ Maven 3.9.9（MAVEN_HOME: D:\maven）
-- ✅ MySQL 运行在 127.0.0.1:3306（库名 `datax_web`，用户 `devuser`）
+**本机需要满足：**
+- JDK 8（`java -version` 期望 `1.8.0_xxx`；本仓库只在 JDK 8 下构建与验证过）
+- Maven 3.x
+- MySQL 运行在 127.0.0.1:3306，库名 `datax_web`，用一个你有权限的账号
 
 ---
 
 ## 二、数据库准备（3 分钟）
 
-### 2.1 如果数据库已存在（你的情况）
+### 2.1 如果数据库已经建好
 
-你之前的 qwen 已经建好了 `datax_web` 库（12 张表），直接跳到 **第三步**。
+跳过本节，直接到 **第三步**。
 
 ### 2.2 如果需要新建
 
@@ -45,9 +45,9 @@ Get-NetTCPConnection -LocalPort 3306 -ErrorAction SilentlyContinue
 -- 1. 建库
 CREATE DATABASE IF NOT EXISTS datax_web DEFAULT CHARACTER SET utf8mb4;
 
--- 2. 导入表结构和初始数据
+-- 2. 导入表结构和初始数据（路径换成你自己的仓库根目录）
 USE datax_web;
-SOURCE D:/code/githubCode/datax-web-work/datax-web/bin/db/datax_web.sql;
+SOURCE <仓库根目录>/bin/db/datax_web.sql;
 
 -- 3. 验证
 SHOW TABLES;
@@ -61,7 +61,9 @@ SHOW TABLES;
 ## 三、Maven 构建（5-10 分钟）
 
 ```powershell
-cd D:\code\githubCode\datax-web-work\datax-web
+# 仓库根目录：换成你 clone/解压 的位置，后面所有命令都用它
+$REPO = "<仓库根目录>"      # 例：$REPO = "C:\src\xinsync"
+cd $REPO
 
 # 全量构建（跳过测试）
 mvn clean install -DskipTests
@@ -87,47 +89,60 @@ datax-executor_2.1.2_1.tar.gz     约 30-50
 
 ## 四、启动 datax-admin（管理端）
 
-### 方式 A：直接用 Java 命令启动（推荐，最简单）
+### 启动前：先准备三个密钥（一次性，且不要抄任何示例值）
 
-由于 XinSync fork 已经为 `application.yml` 补上了所有默认值，可以直接运行主类：
+`application.yml` 对 JWT 密钥与通信令牌**故意不给可用默认值**（空值 → 每次启动随机签名密钥 / 回调被拒），
+数据源口令的出厂 AES 密钥 `AD42F6697B035B75` 会被启动日志判定为不安全。
+本文档也不再给可以直接抄的常量：**公开在仓库里的密钥等于没有密钥**，任何照做部署的人都会共用同一把后门。
 
 ```powershell
-cd D:\code\githubCode\datax-web-work\datax-web
+# 只生成一次，然后写进你的密码管理器 / 部署编排，长期固定使用
+$rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
 
-# 设置数据库连接（根据你的实际情况修改）
-$env:DB_HOST = "127.0.0.1"
-$env:DB_PORT = "3306"
-$env:DB_DATABASE = "datax_web"
-$env:DB_USERNAME = "devuser"
-$env:DB_PASSWORD = "你的MySQL密码"
+$b = New-Object byte[] 48; $rng.GetBytes($b)     # JWT 签名密钥（≥32 字符）
+$env:DATAX_JWT_SECRET   = [Convert]::ToBase64String($b)
 
-# 设置安全密钥（演示环境可用简单值，生产环境必须用强随机串）
-$env:DATAX_JWT_SECRET = "XinSync2026DemoSecretKeyAtLeast32Chars"
-$env:DATAX_AES_KEY = "XinSyncDemo2026AES"
-$env:DATAX_ACCESS_TOKEN = "xinsync-demo-token-2026"
+$b = New-Object byte[] 16; $rng.GetBytes($b)     # 数据源口令加密密钥（32 位十六进制）
+$env:DATAX_AES_KEY      = [BitConverter]::ToString($b).Replace("-", "")
 
-# 启动！
-mvn -pl datax-admin -am spring-boot:run -Dspring-boot.run.jvmArguments="-Dserver.port=9527"
+$b = New-Object byte[] 24; $rng.GetBytes($b)     # admin <-> executor 通信令牌
+$env:DATAX_ACCESS_TOKEN = [Convert]::ToBase64String($b)
 ```
 
-> 注意：上面的命令需要 pom 里有 spring-boot-maven-plugin。如果报错，用下面的方式 B。
+> ⚠️ 三个值都不能随手换：
+> - 换 `DATAX_AES_KEY` → 旧密钥入库的数据源口令全部解不开，必须重新录入数据源；
+> - 换 `DATAX_JWT_SECRET` → 所有已登录会话失效；多实例部署时各实例必须用同一个值，否则 A 机签发的 token 在 B 机不被认；
+> - 换 `DATAX_ACCESS_TOKEN` → admin 与 executor 两侧要同时改，否则回调被拒、任务统一报认证失败。
 
-### 方式 B：用 classpath 方式启动（最可靠）
+下面的每个启动方式里，把这 3 个变量设成你上面生成（并自行保管）的值。
+
+### 方式 A：`spring-boot:run`（**当前不可用**）
 
 ```powershell
-cd D:\code\githubCode\datax-web-work\datax-web
+mvn -pl datax-admin -am spring-boot:run
+```
 
-# 设置环境变量（同方式A）
+本仓库的 pom 里**没有** `spring-boot-maven-plugin`（只有 `maven-jar-plugin` / `exec-maven-plugin` / `maven-assembly-plugin`），
+这条命令会以 "No plugin found for prefix 'spring-boot'" 失败。请用方式 B。
+
+### 方式 B：用 Maven exec 插件启动（推荐，最简单）
+
+```powershell
+cd $REPO                       # 见第三步定义的仓库根目录
+
+# 数据库连接
 $env:DB_HOST = "127.0.0.1"
 $env:DB_PORT = "3306"
-$env:DB_DATABASE = "datax_web"
-$env:DB_USERNAME = "devuser"
-$env:DB_PASSWORD = "你的MySQL密码"
-$env:DATAX_JWT_SECRET = "XinSync2026DemoSecretKeyAtLeast32Chars"
-$env:DATAX_AES_KEY = "XinSyncDemo2026AES"
-$env:DATAX_ACCESS_TOKEN = "xinsync-demo-token-2026"
+$env:DB_DATABASE = "datax_web"      # 默认值是 dataxweb（无下划线），必须显式设
+$env:DB_USERNAME = "<你的数据库账号>"
+$env:DB_PASSWORD = "<你的数据库密码>"
 
-# 用 Maven exec 插件启动（自动处理 classpath）
+# 安全密钥：用"启动前"那一节生成的随机值，不要写常量
+$env:DATAX_JWT_SECRET = "<生成的随机串>"
+$env:DATAX_AES_KEY = "<生成的随机串>"
+$env:DATAX_ACCESS_TOKEN = "<生成的随机串>"
+
+# 启动
 mvn -pl datax-admin exec:java -Dexec.mainClass="com.wugui.datax.admin.DataXAdminApplication"
 ```
 
@@ -135,30 +150,31 @@ mvn -pl datax-admin exec:java -Dexec.mainClass="com.wugui.datax.admin.DataXAdmin
 
 ```powershell
 # 解压
-cd D:\code\githubCode\datax-web-work\datax-web
+cd $REPO
 mkdir deploy -ErrorAction SilentlyContinue
 tar -xzf packages/datax-admin_2.1.2_1.tar.gz -C deploy/
+```
 
-# 用 Git Bash 执行 Linux 启动脚本
-# 打开 Git Bash（不是 PowerShell），然后：
-cd /d/code/githubCode/datax-web-work/datax-web/deploy/datax-admin
-export DB_PASSWORD="你的MySQL密码"
-export DB_USERNAME="devuser"
+```bash
+# 打开 Git Bash（不是 PowerShell），把路径换成你的仓库根目录
+cd <仓库根目录>/deploy/datax-admin
+export DB_PASSWORD="<你的数据库密码>"
+export DB_USERNAME="<你的数据库账号>"
 export DB_DATABASE="datax_web"
-export DATAX_JWT_SECRET="XinSync2026DemoSecretKeyAtLeast32Chars"
-export DATAX_AES_KEY="XinSyncDemo2026AES"
-export DATAX_ACCESS_TOKEN="xinsync-demo-token-2026"
+export DATAX_JWT_SECRET="<生成的随机串>"
+export DATAX_AES_KEY="<生成的随机串>"
+export DATAX_ACCESS_TOKEN="<生成的随机串>"
 bin/datax-admin.sh start
 ```
 
 ### 方式 D：IDEA 里直接运行（最适合开发调试）
 
-1. 用 IDEA 打开 `D:\code\githubCode\datax-web-work\datax-web`
+1. 用 IDEA 打开你的仓库根目录
 2. 找到 `datax-admin/src/main/java/com/wugui/datax/admin/DataXAdminApplication.java`
 3. 右键 → `Run 'DataXAdminApplication'`
-4. 在 Run Configuration 的 **Environment variables** 里添加：
+4. 在 Run Configuration 的 **Environment variables** 里添加（值全部用上面生成的随机串）：
    ```
-   DB_HOST=127.0.0.1;DB_PORT=3306;DB_DATABASE=datax_web;DB_USERNAME=devuser;DB_PASSWORD=你的密码;DATAX_JWT_SECRET=XinSync2026DemoSecretKeyAtLeast32Chars;DATAX_AES_KEY=XinSyncDemo2026AES;DATAX_ACCESS_TOKEN=xinsync-demo-token-2026
+   DB_HOST=127.0.0.1;DB_PORT=3306;DB_DATABASE=datax_web;DB_USERNAME=<你的数据库账号>;DB_PASSWORD=<你的数据库密码>;DATAX_JWT_SECRET=<生成的随机串>;DATAX_AES_KEY=<生成的随机串>;DATAX_ACCESS_TOKEN=<生成的随机串>
    ```
 5. 点击运行
 
@@ -314,10 +330,10 @@ bin/datax-admin.sh stop
 | `DB_HOST` | 否（默认127.0.0.1） | MySQL地址 | `127.0.0.1` |
 | `DB_PORT` | 否（默认3306） | MySQL端口 | `3306` |
 | `DB_DATABASE` | 否（默认dataxweb） | 数据库名 | `datax_web` |
-| `DB_USERNAME` | **是** | 数据库用户 | `devuser` |
-| `DB_PASSWORD` | **是** | 数据库密码 | `你的密码` |
-| `DATAX_JWT_SECRET` | 建议设置 | JWT签名密钥（≥32字符） | `XinSync2026...` |
-| `DATAX_AES_KEY` | 建议设置 | 数据源口令加密密钥 | `XinSyncDemo2026AES` |
-| `DATAX_ACCESS_TOKEN` | 建议设置 | Admin↔Executor通信令牌 | `xinsync-demo-token` |
+| `DB_USERNAME` | **是** | 数据库用户 | `<你的数据库账号>` |
+| `DB_PASSWORD` | **是** | 数据库密码 | `<你的数据库密码>` |
+| `DATAX_JWT_SECRET` | **生产必填** | JWT 签名密钥（≥32 字符随机串）；留空则每次启动随机生成，重启后所有 token 失效；`datax_admin`/`datax-web`/`secret`/`123456` 这几个已知默认值会被直接忽略 | 见"启动前：先准备三个密钥" |
+| `DATAX_AES_KEY` | **生产必填** | 数据源口令落库加密密钥；出厂值 `AD42F6697B035B75` 会被启动日志判为不安全；换 key 后旧口令解不开 | 同上 |
+| `DATAX_ACCESS_TOKEN` | **生产必填** | Admin↔Executor 通信令牌；留空时回调接口一律拒绝（除非显式 `DATAX_ALLOW_EMPTY_ACCESS_TOKEN=true`），admin 与 executor 两侧必须一致 | 同上 |
 
 > ⚠️ `DB_DATABASE` 默认值是 `dataxweb`（无下划线），而你的实际库名是 `datax_web`（有下划线），**必须显式设置**！

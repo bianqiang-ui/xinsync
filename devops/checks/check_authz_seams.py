@@ -16,6 +16,10 @@
 证明不了每个敏感方法都调用了它。上一轮复核还抓到更细的一条——**调用还在、结果被丢掉**
 （`AccessControl.requireAdmin();` 但不 return 拒绝体），子串存在型检查对这种完全无感。
 所以本门禁判的是"赋值 → 非空即返回"这条闭环，不是字符串出没出现过。
+
+不该再加回本门禁的一条：`DataxJsonController#buildJobJson` **不以管理员判定收口**。
+它是普通用户建作业向导的唯一 JSON 生成入口，收归管理员等于把主流程关掉（上一版就是这么改坏的）。
+它的外发面靠"产出里不含账密"收口，由 `check_datasource_secret_scrub.py` 守，见那里的 job_json 三条件。
 """
 import re
 import sys
@@ -76,8 +80,6 @@ RULES = [
     ("controller/JobDatasourceController.java", "update", "admin"),
     ("controller/JobDatasourceController.java", "delete", "admin"),
     ("controller/JobDatasourceController.java", "dataSourceTest", "admin"),
-    # buildJson 返回的 JSON 包含数据源明文口令，必须管理员
-    ("controller/DataxJsonController.java", "buildJobJson", "admin"),
     # GLUE 脚本型任务（Shell/Python/…）的 add/update 收归管理员：
     # ScriptJobHandler → ScriptUtil.markScriptFile → Runtime.exec，
     # 脚本内容本身就是命令，参数守卫对它无效。

@@ -4,6 +4,7 @@ import com.google.common.collect.Maps;
 import com.wugui.datatx.core.util.Constants;
 import com.wugui.datax.admin.dto.UpsertInfo;
 import com.wugui.datax.admin.entity.JobDatasource;
+import com.wugui.datax.admin.tool.datax.DsSecretPlaceholder;
 import com.wugui.datax.admin.tool.pojo.DataxMongoDBPojo;
 
 import java.util.Arrays;
@@ -37,8 +38,11 @@ public class MongoDBWriter extends BaseWriterPlugin implements DataxWriterInterf
             addressList = str.substring(0, str.indexOf(Constants.SPLIT_DIVIDE)).split(Constants.SPLIT_COMMA);
         }
         parameterObj.put("address", addressList);
-        parameterObj.put("userName", dataSource.getJdbcUsername() == null ? Constants.STRING_BLANK : dataSource.getJdbcUsername());
-        parameterObj.put("userPassword", dataSource.getJdbcPassword() == null ? Constants.STRING_BLANK : dataSource.getJdbcPassword());
+        // 见 MongoDBReader：占位符还原与键名无关
+        String username = DsSecretPlaceholder.usernameForJson(dataSource);
+        String password = DsSecretPlaceholder.passwordForJson(dataSource);
+        parameterObj.put("userName", username == null ? Constants.STRING_BLANK : username);
+        parameterObj.put("userPassword", password == null ? Constants.STRING_BLANK : password);
         parameterObj.put("dbName", dataSource.getDatabaseName());
         parameterObj.put("collectionName", plugin.getWriterTable());
         parameterObj.put("column", plugin.getColumns());

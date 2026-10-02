@@ -5,6 +5,7 @@ import com.google.common.collect.Maps;
 import com.wugui.datatx.core.util.Constants;
 import com.wugui.datax.admin.entity.JobDatasource;
 import com.wugui.datax.admin.tool.datax.BaseDataxPlugin;
+import com.wugui.datax.admin.tool.datax.DsSecretPlaceholder;
 import com.wugui.datax.admin.tool.pojo.DataxHbasePojo;
 import com.wugui.datax.admin.tool.pojo.DataxHivePojo;
 import com.wugui.datax.admin.tool.pojo.DataxMongoDBPojo;
@@ -32,8 +33,9 @@ public abstract class BaseWriterPlugin extends BaseDataxPlugin {
         Map<String, Object> parameterObj = Maps.newLinkedHashMap();
 //        parameterObj.put("writeMode", "insert");
         JobDatasource jobDatasource = plugin.getJobDatasource();
-        parameterObj.put("username", jobDatasource.getJdbcUsername());
-        parameterObj.put("password", jobDatasource.getJdbcPassword());
+        // 账密只写占位符，明文留到派发那一刻再还原（见 DsSecretPlaceholder）
+        parameterObj.put("username", DsSecretPlaceholder.usernameForJson(jobDatasource));
+        parameterObj.put("password", DsSecretPlaceholder.passwordForJson(jobDatasource));
         parameterObj.put("column", plugin.getRdbmsColumns());
         parameterObj.put("preSql", splitSql(plugin.getPreSql()));
         parameterObj.put("postSql", splitSql(plugin.getPostSql()));
