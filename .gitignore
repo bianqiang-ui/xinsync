@@ -18,3 +18,6 @@
 /build/
 /packages/
 /datax-assembly/target/
+# devops/checks 下的门禁是 python 脚本，跑一次就会生成缓存目录
+__pycache__/
+*.pyc
