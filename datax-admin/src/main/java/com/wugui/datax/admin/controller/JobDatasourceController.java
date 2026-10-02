@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.api.R;
 import com.wugui.datax.admin.core.util.LocalCacheUtil;
 import com.wugui.datax.admin.entity.JobDatasource;
+import com.wugui.datax.admin.security.AccessControl;
 import com.wugui.datax.admin.service.JobDatasourceService;
 import io.swagger.annotations.Api;
 import io.swagger.annotations.ApiImplicitParam;
@@ -85,6 +86,12 @@ public class JobDatasourceController extends BaseController {
     @ApiOperation("新增数据")
     @PostMapping
     public R<Boolean> insert(@RequestBody JobDatasource entity) {
+        // 数据源没有属主列（job_datasource 无 user_id），是全平台共享的基础设施：
+        // 建一个源 = 让调度器往后朝这个地址连库，所以写操作管理员专属；只读接口不动。
+        String deny = AccessControl.adminDeny();
+        if (deny != null) {
+            return failed(deny);
+        }
         return success(this.jobJdbcDatasourceService.save(entity));
     }
 
@@ -97,6 +104,10 @@ public class JobDatasourceController extends BaseController {
     @PutMapping
     @ApiOperation("修改数据")
     public R<Boolean> update(@RequestBody JobDatasource entity) {
+        String deny = AccessControl.adminDeny();
+        if (deny != null) {
+            return failed(deny);
+        }
         LocalCacheUtil.remove(entity.getDatasourceName());
         JobDatasource d = jobJdbcDatasourceService.getById(entity.getId());
         if (d == null) {
@@ -122,6 +133,10 @@ public class JobDatasourceController extends BaseController {
     @DeleteMapping
     @ApiOperation("删除数据")
     public R<Boolean> delete(@RequestParam("idList") List<Long> idList) {
+        String deny = AccessControl.adminDeny();
+        if (deny != null) {
+            return failed(deny);
+        }
         return success(this.jobJdbcDatasourceService.removeByIds(idList));
     }
 
@@ -133,6 +148,12 @@ public class JobDatasourceController extends BaseController {
     @PostMapping("/test")
     @ApiOperation("测试数据")
     public R<Boolean> dataSourceTest (@RequestBody JobDatasource jobJdbcDatasource) throws IOException {
+        // 这个接口会拿请求体里的 jdbcUrl 真的去建连接，等于一个任意地址探测面（SSRF）。
+        // 数据源本身是平台级资源，连"试连"也收归管理员；前端建源流程本来就在管理员页面里。
+        String deny = AccessControl.adminDeny();
+        if (deny != null) {
+            return failed(deny);
+        }
         return success(jobJdbcDatasourceService.dataSourceTest(jobJdbcDatasource));
     }
 }

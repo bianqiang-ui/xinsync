@@ -34,6 +34,7 @@ public final class AccessControl {
     public static final String ROLE_NORMAL = "0";
 
     private static final String NO_ADMIN_MSG = "该操作需要管理员权限";
+    private static final String NO_OWNER_MSG = "只能操作本人的资源，需要代管请交给管理员执行";
 
     private AccessControl() {
     }
@@ -81,10 +82,21 @@ public final class AccessControl {
     }
 
     /**
+     * 管理员判定的文案版：本仓库的接口有两种返回体（ReturnT 与 mybatis-plus 的 R），
+     * 判定与文案只留这一处，返回体形态由调用方自己适配。
+     *
+     * @return 放行返回 null；拒绝返回可直接回给前端的文案
+     */
+    public static String adminDeny() {
+        return isAdmin() ? null : NO_ADMIN_MSG;
+    }
+
+    /**
      * @return 放行时返回 null；拒绝时返回可直接回给前端的失败体
      */
     public static ReturnT<String> requireAdmin() {
-        return isAdmin() ? null : new ReturnT<String>(ReturnT.FAIL_CODE, NO_ADMIN_MSG);
+        String deny = adminDeny();
+        return deny == null ? null : new ReturnT<String>(ReturnT.FAIL_CODE, deny);
     }
 
     /**
@@ -101,5 +113,26 @@ public final class AccessControl {
             return null;
         }
         return new ReturnT<String>(ReturnT.FAIL_CODE, "只能修改本人的密码");
+    }
+
+    /**
+     * 按 id 操作别人资源的越权（IDOR）判定：要么是管理员，要么是这条记录在库里的属主。
+     *
+     * 属主必须取自库里 load 出来的那一行，绝不能取自请求体：本仓库原先的写法是
+     * update 时把 user_id 直接覆写成调用者的 id，于是"改一次 = 把别人的任务变成自己的"，
+     * 而 remove / stop / start / 改 glueSource 更是连属主都不看。
+     *
+     * @param ownerUserId   库里那一行的 user_id
+     * @param currentUserId 当前登录用户 id（与 BaseController#getCurrentUserId 同源，取自 JWT）
+     * @return 放行返回 null；拒绝返回可直接回给前端的文案
+     */
+    public static String denyUnlessAdminOrOwner(int ownerUserId, Integer currentUserId) {
+        if (isAdmin()) {
+            return null;
+        }
+        if (currentUserId != null && currentUserId > 0 && currentUserId.intValue() == ownerUserId) {
+            return null;
+        }
+        return NO_OWNER_MSG;
     }
 }

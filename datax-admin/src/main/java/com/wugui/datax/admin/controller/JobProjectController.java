@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.api.R;
 import com.wugui.datax.admin.entity.JobProject;
+import com.wugui.datax.admin.security.AccessControl;
 import com.wugui.datax.admin.service.JobProjectService;
 import io.swagger.annotations.Api;
 import io.swagger.annotations.ApiOperation;
@@ -89,10 +90,18 @@ public class JobProjectController extends BaseController {
      */
     @PutMapping
     @ApiOperation("修改数据")
-    public R<Boolean> update(@RequestBody JobProject entity) {
-        JobProject project = jobProjectService.getById(entity.getId());
-        project.setName(entity.getName());
-        project.setDescription(entity.getDescription());
+    public R<Boolean> update(HttpServletRequest request, @RequestBody JobProject entity) {
+        // 原先是 getById(...) 之后直接 project.setName(...)：id 不存在时 NPE 变成 500，
+        // 而且任何人改任何项目都无人把关；归属以库里那一行为准。
+        JobProject exists = jobProjectService.getById(entity.getId());
+        if (exists == null) {
+            return failed("项目不存在，id = " + entity.getId());
+        }
+        String deny = AccessControl.denyUnlessAdminOrOwner(exists.getUserId(), getCurrentUserId(request));
+        if (deny != null) {
+            return failed(deny);
+        }
+        entity.setUserId(exists.getUserId());
         return success(this.jobProjectService.updateById(entity));
     }
 
@@ -104,7 +113,20 @@ public class JobProjectController extends BaseController {
      */
     @DeleteMapping
     @ApiOperation("删除数据")
-    public R<Boolean> delete(@RequestParam("idList") List<Long> idList) {
+    public R<Boolean> delete(HttpServletRequest request, @RequestParam("idList") List<Long> idList) {
+        // 批量删除里只要有一条不属于当前用户（且他不是管理员）就整批拒绝，
+        // 不能"能删的删掉、不能删的静默跳过"——那等于把越权失败伪装成部分成功。
+        Integer currentUserId = getCurrentUserId(request);
+        for (Long id : idList) {
+            JobProject exists = jobProjectService.getById(id);
+            if (exists == null) {
+                continue;
+            }
+            String deny = AccessControl.denyUnlessAdminOrOwner(exists.getUserId(), currentUserId);
+            if (deny != null) {
+                return failed("id = " + id + "：" + deny);
+            }
+        }
         return success(this.jobProjectService.removeByIds(idList));
     }
 }

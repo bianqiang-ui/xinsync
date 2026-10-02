@@ -10,6 +10,8 @@ import com.wugui.datax.admin.core.util.I18nUtil;
 import com.wugui.datax.admin.dto.DataXBatchJsonBuildDto;
 import com.wugui.datax.admin.dto.TriggerJobDto;
 import com.wugui.datax.admin.entity.JobInfo;
+import com.wugui.datax.admin.mapper.JobInfoMapper;
+import com.wugui.datax.admin.security.AccessControl;
 import com.wugui.datax.admin.service.JobService;
 import io.swagger.annotations.Api;
 import io.swagger.annotations.ApiOperation;
@@ -36,6 +38,26 @@ public class JobInfoController extends BaseController{
 
     @Resource
     private JobService jobService;
+    @Resource
+    private JobInfoMapper jobInfoMapper;
+
+    /**
+     * 按 id 动一个任务之前先判归属：管理员放行，否则只能动自己的。
+     *
+     * @param exists 库里 load 出来的那一行（不信任请求体里的 userId，也不重新查第二遍）
+     * @return 放行返回 null；拒绝返回可直接回给前端的失败体
+     */
+    private ReturnT<String> denyUnlessCanOperate(JobInfo exists, HttpServletRequest request) {
+        if (exists == null) {
+            return new ReturnT<>(ReturnT.FAIL_CODE,
+                    I18nUtil.getString("jobinfo_field_id") + I18nUtil.getString("system_not_found"));
+        }
+        String deny = AccessControl.denyUnlessAdminOrOwner(exists.getUserId(), getCurrentUserId(request));
+        if (deny != null) {
+            return new ReturnT<>(ReturnT.FAIL_CODE, deny);
+        }
+        return null;
+    }
 
 
     @GetMapping("/pageList")
@@ -63,25 +85,44 @@ public class JobInfoController extends BaseController{
     @PostMapping("/update")
     @ApiOperation("更新任务")
     public ReturnT<String> update(HttpServletRequest request,@RequestBody JobInfo jobInfo) {
-        jobInfo.setUserId(getCurrentUserId(request));
+        JobInfo exists = jobInfoMapper.loadById(jobInfo.getId());
+        ReturnT<String> deny = denyUnlessCanOperate(exists, request);
+        if (deny != null) {
+            return deny;
+        }
+        // 属主以库里那一行为准。原先这里无条件写成调用者的 id：同事或管理员改一次配置，
+        // 任务的 user_id 就跟着变成他，真正的属主反而从此失去这个任务。
+        jobInfo.setUserId(exists.getUserId());
         return jobService.update(jobInfo);
     }
 
     @PostMapping(value = "/remove/{id}")
     @ApiOperation("移除任务")
-    public ReturnT<String> remove(@PathVariable(value = "id") int id) {
+    public ReturnT<String> remove(HttpServletRequest request, @PathVariable(value = "id") int id) {
+        ReturnT<String> deny = denyUnlessCanOperate(jobInfoMapper.loadById(id), request);
+        if (deny != null) {
+            return deny;
+        }
         return jobService.remove(id);
     }
 
     @RequestMapping(value = "/stop",method = RequestMethod.POST)
     @ApiOperation("停止任务")
-    public ReturnT<String> pause(int id) {
+    public ReturnT<String> pause(HttpServletRequest request, int id) {
+        ReturnT<String> deny = denyUnlessCanOperate(jobInfoMapper.loadById(id), request);
+        if (deny != null) {
+            return deny;
+        }
         return jobService.stop(id);
     }
 
     @RequestMapping(value = "/start",method = RequestMethod.POST)
     @ApiOperation("开启任务")
-    public ReturnT<String> start(int id) {
+    public ReturnT<String> start(HttpServletRequest request, int id) {
+        ReturnT<String> deny = denyUnlessCanOperate(jobInfoMapper.loadById(id), request);
+        if (deny != null) {
+            return deny;
+        }
         return jobService.start(id);
     }
 
