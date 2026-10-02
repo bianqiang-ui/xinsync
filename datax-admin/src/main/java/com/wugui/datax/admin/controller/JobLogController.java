@@ -74,7 +74,7 @@ public class JobLogController extends BaseController {
 
     @RequestMapping(value = "/logDetailCat", method = RequestMethod.GET)
     @ApiOperation("运行日志详情")
-    public ReturnT<LogResult> logDetailCat(String executorAddress, long triggerTime, long logId, int fromLineNum) {
+    public ReturnT<LogResult> logDetailCat(HttpServletRequest request, String executorAddress, long triggerTime, long logId, int fromLineNum) {
         // executorAddress 必须由库里的执行记录说了算：原先它直接来自查询参数，
         // 这个接口就成了"让 admin 去访问任意地址"的探测器，而且 accessToken 会随请求头发到对方主机。
         JobLog jobLog = jobLogMapper.load(logId);
@@ -84,6 +84,16 @@ public class JobLogController extends BaseController {
         if (jobLog.getExecutorAddress() == null || !jobLog.getExecutorAddress().equals(executorAddress)) {
             logger.warn(">>>>>>>>>>> datax-web, logDetailCat rejected, logId={} 的登记地址与请求地址不一致", logId);
             return new ReturnT<>(ReturnT.FAIL_CODE, "执行器地址与该执行记录不匹配");
+        }
+        // 日志正文里带着目标库连接串、SQL 与数据样本，属于"别人的数据"：
+        // 光锁地址只挡住了 SSRF，任何登录用户换个 logId 照样能读别人的运行内容。
+        JobInfo logOwnerRef = jobInfoMapper.loadById(jobLog.getJobId());
+        if (logOwnerRef == null) {
+            return new ReturnT<>(ReturnT.FAIL_CODE, I18nUtil.getString("jobinfo_glue_jobid_invalid"));
+        }
+        String deny = AccessControl.denyUnlessAdminOrOwner(logOwnerRef.getUserId(), getCurrentUserId(request));
+        if (deny != null) {
+            return new ReturnT<>(ReturnT.FAIL_CODE, deny);
         }
         try {
             ExecutorBiz executorBiz = JobScheduler.getExecutorBiz(executorAddress);
@@ -194,7 +204,7 @@ public class JobLogController extends BaseController {
 
     @ApiOperation("停止该job作业")
     @PostMapping("/killJob")
-    public ReturnT<String> killJob(@RequestBody JobLog log) {
+    public ReturnT<String> killJob(HttpServletRequest request, @RequestBody JobLog log) {
         // 只认库里那条执行记录。原先 executorAddress / processId 全部取自请求体，
         // 任何登录用户都能借 admin 往任意地址下发 kill，并让执行器杀掉任意 PID（accessToken 也一并外送）。
         JobLog stored = jobLogMapper.load(log.getId());
@@ -204,6 +214,16 @@ public class JobLogController extends BaseController {
         if (stored.getExecutorAddress() == null || stored.getExecutorAddress().trim().length() == 0
                 || stored.getProcessId() == null || stored.getProcessId().trim().length() == 0) {
             return new ReturnT<>(ReturnT.FAIL_CODE, "该执行记录没有登记执行器地址或进程号，无法终止");
+        }
+        // 与 logKill 同一档：终止别人的作业会打断正在写的目标表，留下一半数据。
+        // 地址和 PID 现在都从库里取，但"谁能按 logId 下发"还没判，归属以那条任务在库里的属主为准。
+        JobInfo killOwnerRef = jobInfoMapper.loadById(stored.getJobId());
+        if (killOwnerRef == null) {
+            return new ReturnT<>(ReturnT.FAIL_CODE, I18nUtil.getString("jobinfo_glue_jobid_invalid"));
+        }
+        String deny = AccessControl.denyUnlessAdminOrOwner(killOwnerRef.getUserId(), getCurrentUserId(request));
+        if (deny != null) {
+            return new ReturnT<>(ReturnT.FAIL_CODE, deny);
         }
         return KillJob.trigger(stored.getId(), stored.getTriggerTime(),
                 stored.getExecutorAddress(), stored.getProcessId());

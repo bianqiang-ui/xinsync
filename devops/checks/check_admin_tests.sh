@@ -16,6 +16,9 @@
 #   6) SqlSafeIdentifierTest + BaseFormOrderByWhitelistTest —— 分页接口的 ascs/descs 与列查询 key
 #      是"用户可控且必然落进 SQL 结构位置"的字符串（mybatis-plus 的列名参数不走预编译），
 #      只许是裸列名；同时钉住合法用法（ascs=datasource_name、驼峰 key 规范化）不被白名单误杀。
+#   7) JobLogControllerOwnershipTest —— 运行日志面在"地址/PID 只认库里那行"之后剩下的另一半：
+#      谁能按 logId 调。读别人的日志正文（含目标库连接串与数据样本）、kill 别人正在跑的作业，
+#      都必须"管理员或本人"，且判定要排在发 RPC 之前。
 #
 # 判定标准与 TDSQL 门禁完全一致（同一个 lib）：测试没被编译/没跑起来，本身就判失败。
 set -u
@@ -23,7 +26,7 @@ set -u
 cd "$(dirname "$0")/../.." || exit 1
 . devops/checks/lib_mvn_test_gate.sh
 
-GATE_TESTS="JobDatasourceControllerUpdateTest,JobScheduleHelperMisfireLogTest,BaseQueryToolMaxIdTest,AccessControlTest,JobServiceBatchAddOwnerTest,SqlSafeIdentifierTest,BaseFormOrderByWhitelistTest"
+GATE_TESTS="JobDatasourceControllerUpdateTest,JobScheduleHelperMisfireLogTest,BaseQueryToolMaxIdTest,AccessControlTest,JobServiceBatchAddOwnerTest,SqlSafeIdentifierTest,BaseFormOrderByWhitelistTest,JobLogControllerOwnershipTest"
 
 # 上游自带的测试类大多要连真库/真服务，在这个 fork 的门禁环境里跑不了。
 # 但"新写了一个 *Test 却没进任何名单"必须当场 FAIL —— 否则门禁名单会变成静默漏跑的黑名单，

@@ -49,6 +49,10 @@ RULES = [
     # kill/看日志必须以库里那条执行记录为准，不能信请求体里传进来的地址和 PID
     ("controller/JobLogController.java", "killJob", "stored"),
     ("controller/JobLogController.java", "logDetailCat", "stored"),
+    # 地址锁死之后还剩"谁能按 logId 调"这一层：日志正文含目标库连接串与数据样本，
+    # kill 会打断正在写的目标表留下一半数据 —— 两个都必须管理员或本人。
+    ("controller/JobLogController.java", "killJob", "owner"),
+    ("controller/JobLogController.java", "logDetailCat", "owner"),
     ("controller/JobLogController.java", "logKill", "owner"),
     ("controller/JobLogController.java", "clearLog", "admin"),
     # 按 id 操作资源的归属闭环
