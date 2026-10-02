@@ -80,7 +80,7 @@ MAIL_PASSWORD=""
 此文件中包括一些默认配置参数，例如：server.port，具体请查看文件。
 
 
-在项目目录下/modules/datax-execute/bin/env.properties 指定PYTHON_PATH的路径
+在项目目录下/modules/datax-executor/bin/env.properties 指定PYTHON_PATH的路径
 
 ```
 vi ./modules/{module_name}/bin/env.properties
@@ -135,9 +135,22 @@ Tips: 脚本使用的都是bash指令集，如若使用sh调用脚本，可能�
    
 ### 8) 运行日志
 
-   部署完成之后，在modules/对应的项目/data/applogs下(用户也可以自己指定日志，修改application.yml
-   中的logpath地址即可)，用户可以根据此日志跟踪项目实际启动情况   
-   
+   部署完成之后，应用日志在 `modules/对应的项目/data/applogs` 下（admin 为 `data/applogs/admin/datax-admin.log`，
+   执行器为 `data/applogs/executor/jobhandler/datax-executor.log`）。
+
+   改日志位置要看准是哪一层，此处最容易踩的坑有两个：
+
+   - **应用日志（logback 写的 datax-admin.log / datax-executor.log）**：由 `conf/application.yml` 的
+     `logging.path` 决定，出厂写成 `logging.path: ${data.path:./data}/applogs/admin`，
+     而 `data.path` 来自 `bin/env.properties` 的 `DATA_PATH`（启动脚本以 `-Ddata.path` 传入）。
+     **所以日常只要改 `DATA_PATH` 就够了。**
+     注意启动脚本另外还传了 `-Dlog.path=${SERVICE_LOG_PATH}`，但 `logback.xml` 读的是大写
+     `${LOG_PATH}`（Spring Boot 根据 `logging.path` 设置），两个名字不同名 —— 改 `SERVICE_LOG_PATH`
+     只影响堆转储目录，**不会**移动日志文件；`env.properties` 里的 `WEB_LOG_PATH` 也是死键，脚本读的是
+     `SERVICE_LOG_PATH`。
+   - **每次任务运行的日志**：由执行器 `conf/application.yml` 的 `datax.job.executor.logpath` 决定，
+     它存的是 DataX 子进程的输出，供 admin 页面按 logId 查看，和应用日志不是一个目录，别混。
+
    如果执行器启动比admin快，执行器会连接失败，日志报"拒绝连接"的错误，一般是先启动admin,再启动executor,30秒之后会重连，如果成功请忽略这个异常。
    
 ### 9）集群部署

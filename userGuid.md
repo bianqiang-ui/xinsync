@@ -190,10 +190,15 @@
     username: root
     password: root
     url: jdbc:mysql://localhost:3306/datax_web?serverTimezone=Asia/Shanghai&useLegacyDatetimeCode=false&useSSL=false&nullNamePatternMatchesAll=true&useUnicode=true&characterEncoding=UTF-8
-    driver-class-name: com.mysql.jdbc.Driver
+    driver-class-name: com.mysql.cj.jdbc.Driver
 ```
 
 修改数据源配置，目前仅支持mysql
+
+> 驱动类名以 `datax-admin/src/main/resources/application.yml` 为准：本项目依赖 `mysql-connector-j` 8.0.33，
+> 出厂 yml 写的是 `com.mysql.cj.jdbc.Driver`。老口径 `com.mysql.jdbc.Driver` 在 8.x 里只是兼容别名，
+> 连上后会打一条 deprecation 警告，8.0.13+ 还会因为时区参数要求而更容易报错，不要再照抄。
+> 另外 8.x 的 url 必须带 `serverTimezone`（上面已给），否则会抛 `The server time zone value is unrecognized`。
 
 ```
 # 配置mybatis-plus打印sql日志
@@ -241,7 +246,7 @@ datax:
   job:
     admin:
       ### datax-web admin address
-      addresses: http://127.0.0.1:8080
+      addresses: http://127.0.0.1:9527
     executor:
       appname: datax-executor
       ip:
@@ -282,7 +287,10 @@ admin启动成功后日志会输出三个地址，两个接口文档地址，一
 # 五、启动成功
 
 启动成功后打开页面（默认管理员用户名：admin 密码：123456）
-http://localhost:8080/index.html#/dashboard
+http://localhost:9527/index.html#/dashboard
+
+> 9527 是 `datax-admin` 的 `server.port`（`application.yml`），不是 8080；
+> 执行器的 web 端口是 9504、RPC 端口是 9999，前端页面只在 admin 的 9527 上提供。
 ![](https://datax-web.oss-cn-hangzhou.aliyuncs.com/doc/dashboard.png)
 
 # 六、集群部署
