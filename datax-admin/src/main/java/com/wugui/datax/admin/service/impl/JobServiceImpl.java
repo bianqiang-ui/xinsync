@@ -4,6 +4,7 @@ import com.wugui.datatx.core.biz.model.ReturnT;
 import com.wugui.datatx.core.enums.ExecutorBlockStrategyEnum;
 import com.wugui.datatx.core.glue.GlueTypeEnum;
 import com.wugui.datatx.core.util.DateUtil;
+import com.wugui.datatx.core.util.JobParamSafety;
 import com.wugui.datax.admin.core.cron.CronExpression;
 import com.wugui.datax.admin.core.route.ExecutorRouteStrategyEnum;
 import com.wugui.datax.admin.core.thread.JobScheduleHelper;
@@ -101,6 +102,10 @@ public class JobServiceImpl implements JobService {
         if (ExecutorBlockStrategyEnum.match(jobInfo.getExecutorBlockStrategy(), null) == null) {
             return new ReturnT<>(ReturnT.FAIL_CODE, (I18nUtil.getString("jobinfo_field_executorBlockStrategy") + I18nUtil.getString("system_invalid")));
         }
+        String paramDeny = jobParamDenyMessage(jobInfo);
+        if (paramDeny != null) {
+            return new ReturnT<>(ReturnT.FAIL_CODE, paramDeny);
+        }
         if (GlueTypeEnum.match(jobInfo.getGlueType()) == null) {
             return new ReturnT<>(ReturnT.FAIL_CODE, (I18nUtil.getString("jobinfo_field_gluetype") + I18nUtil.getString("system_invalid")));
         }
@@ -166,6 +171,17 @@ public class JobServiceImpl implements JobService {
         }
     }
 
+    /**
+     * 作业参数（JVM 参数 / 增量替换参数 / 增量时间格式 / 分区信息）的入库前判定。
+     *
+     * 这几个字段不是数据，是会被拼进 datax.py 命令行的片段 —— 见
+     * {@link JobParamSafety}（datax.py 收尾是 Popen(cmd, shell=True)）。
+     */
+    private static String jobParamDenyMessage(JobInfo jobInfo) {
+        return JobParamSafety.denyMessage(jobInfo.getJvmParam(), jobInfo.getReplaceParam(),
+                jobInfo.getReplaceParamType(), jobInfo.getPartitionInfo());
+    }
+
     @Override
     public ReturnT<String> update(JobInfo jobInfo) {
 
@@ -191,6 +207,11 @@ public class JobServiceImpl implements JobService {
         }
         if (ExecutorBlockStrategyEnum.match(jobInfo.getExecutorBlockStrategy(), null) == null) {
             return new ReturnT<>(ReturnT.FAIL_CODE, (I18nUtil.getString("jobinfo_field_executorBlockStrategy") + I18nUtil.getString("system_invalid")));
+        }
+        // 与 add 同一判定：改任务时同样能把作业参数换成注入载荷，不能只在新建时拦
+        String paramDeny = jobParamDenyMessage(jobInfo);
+        if (paramDeny != null) {
+            return new ReturnT<>(ReturnT.FAIL_CODE, paramDeny);
         }
 
         // ChildJobId valid
@@ -430,6 +451,13 @@ public class JobServiceImpl implements JobService {
         }
 
         DataXJsonBuildDto jsonBuild = new DataXJsonBuildDto();
+
+        // 模板带 jvmParam，下面的 copyProperties 会把它原样拷进每一个新建任务：
+        // 这道口子不判，add/update 上的校验就白做了 —— 一次批量能建出一整批带载荷的任务
+        String templateParamDeny = JobParamSafety.denyMessage(jobTemplate.getJvmParam(), null, null, null);
+        if (templateParamDeny != null) {
+            return new ReturnT<>(ReturnT.FAIL_CODE, templateParamDeny);
+        }
 
         List<String> rColumns;
         List<String> wColumns;

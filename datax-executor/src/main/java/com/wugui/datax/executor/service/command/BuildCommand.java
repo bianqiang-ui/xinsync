@@ -5,6 +5,7 @@ import com.wugui.datatx.core.enums.IncrementTypeEnum;
 import com.wugui.datatx.core.log.JobLogger;
 import com.wugui.datatx.core.util.Constants;
 import com.wugui.datatx.core.util.DateUtil;
+import com.wugui.datatx.core.util.JobParamSafety;
 import com.wugui.datax.executor.util.SystemUtils;
 import org.apache.commons.lang3.StringUtils;
 
@@ -34,6 +35,14 @@ public class BuildCommand {
      * @return
      */
     public static String[] buildDataXExecutorCmd(TriggerParam tgParam, String tmpFilePath, String dataXPyPath, String pythonPath) {
+        // 挨着 shell 的最后一道判定，和管理端 add/update 用的是同一份实现（datax-core）。
+        // 为什么执行器还要判一次：库里可能有历史行、批量建任务会把模板的 jvmParam 原样拷进来，
+        // 只在写入时挡不等于跑的时候安全 —— 而 datax.py 收尾是 Popen(cmd, shell=True)。
+        String paramDeny = JobParamSafety.denyMessage(tgParam);
+        if (paramDeny != null) {
+            throw new IllegalStateException("拒绝执行该作业：" + paramDeny);
+        }
+
         // command process
         //"--loglevel=debug"
         List<String> cmdArr = new ArrayList<>();
