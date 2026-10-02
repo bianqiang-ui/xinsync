@@ -179,7 +179,19 @@ public class JobTrigger {
         if (incrementType != null) {
             triggerParam.setIncrementType(incrementType);
             if (IncrementTypeEnum.ID.getCode() == incrementType) {
-                long maxId = getMaxId(jobInfo);
+                long maxId;
+                try {
+                    maxId = getMaxId(jobInfo);
+                } catch (Exception e) {
+                    // 上界拿不到就绝不下发：原先 getMaxIdVal 会把异常吞成 0，endId=0 让执行器
+                    // "报成功但零字节"，用户完全无从察觉（社区 #672）。这里必须是失败记录。
+                    String reason = "增量主键上界获取失败，任务未下发：" + e;
+                    logger.error(">>>>>>>>>>> datax-web, getMaxId fail, jobId = " + jobInfo.getId(), e);
+                    jobLog.setTriggerCode(ReturnT.FAIL_CODE);
+                    jobLog.setTriggerMsg(reason);
+                    JobAdminConfig.getAdminConfig().getJobLogMapper().updateTriggerInfo(jobLog);
+                    return;
+                }
                 jobLog.setMaxId(maxId);
                 triggerParam.setEndId(maxId);
                 triggerParam.setStartId(jobInfo.getIncStartId());

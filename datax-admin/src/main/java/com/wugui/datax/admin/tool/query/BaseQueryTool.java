@@ -542,24 +542,33 @@ public abstract class BaseQueryTool implements QueryToolInterface {
         checkIdentifier(primaryKey, "主键名");
         Statement stmt = null;
         ResultSet rs = null;
-        long maxVal = 0;
         try {
             stmt = connection.createStatement();
             //获取sql
             String sql = getSQLMaxID(tableName, primaryKey);
             rs = stmt.executeQuery(sql);
-            rs.next();
-            maxVal = rs.getLong(1);
+            // 没有结果行说明这条元数据 SQL 本身出了问题（权限/连接/方言不兼容）。
+            // 以前 SQLException 会被吞掉、直接 return 0，而 0 会作为增量上界 endId 下发给执行器，
+            // 表现就是"任务显示成功但一条数据都没同步"（社区 #672）——取不到上界必须是失败，不能是 0。
+            if (!rs.next()) {
+                throw new IllegalStateException("获取主键上界没有返回结果行，sql = [" + sql + "]");
+            }
+            long maxVal = rs.getLong(1);
+            if (rs.wasNull()) {
+                // 空表时 MAX(id) 本身就是 NULL，这是合法结果，语义上确实没有更大的主键
+                logger.warn("[getMaxIdVal] 表 {}.{} 的上界为 NULL（通常是空表），按 0 处理", tableName, primaryKey);
+                return 0;
+            }
+            return maxVal;
         } catch (SQLException e) {
             logger.error("[getMaxIdVal Exception] --> "
                     + "the exception message is:" + e.getMessage());
+            throw new IllegalStateException("获取主键上界失败，table = " + tableName + ", primaryKey = " + primaryKey
+                    + "：" + e.getMessage(), e);
         } finally {
             JdbcUtils.close(rs);
             JdbcUtils.close(stmt);
         }
-
-
-        return maxVal;
     }
 
     private String getSQLMaxID(String tableName, String primaryKey) {
