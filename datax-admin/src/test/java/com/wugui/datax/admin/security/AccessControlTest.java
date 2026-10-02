@@ -6,7 +6,10 @@ import com.wugui.datax.admin.entity.JwtUser;
 import org.junit.After;
 import org.junit.Test;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
+
+import java.util.Collections;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -116,8 +119,42 @@ public class AccessControlTest {
         loginAs("legacy", null);
 
         assertFalse("role 为 null 的账号绝不能被当成管理员", AccessControl.isAdmin());
-        assertEquals(AccessControl.ROLE_NORMAL,
+        // 期望值写死字面量，不要取 AccessControl.ROLE_NORMAL——那等于拿被测常量证自己的返回，
+        // 常量与归一化同时改坏也照样绿。
+        assertEquals("0",
                 new JwtUser(user("legacy", "  ")).getAuthorities().iterator().next().getAuthority());
+    }
+
+    /**
+     * 生产链路里 principal 是"用户名字符串"（JWTAuthorizationFilter 就是这么构造的），
+     * 不是 JwtUser。判定不能依赖 principal 的具体类型，否则测试全绿而线上失真。
+     */
+    @Test
+    public void productionTokenShapeIsAlsoHonored() {
+        SecurityContextHolder.getContext().setAuthentication(
+                new UsernamePasswordAuthenticationToken("admin", null,
+                        Collections.singletonList(new SimpleGrantedAuthority(AccessControl.ROLE_ADMIN))));
+
+        assertTrue(AccessControl.isAdmin());
+        assertEquals("admin", AccessControl.currentUsername());
+
+        SecurityContextHolder.getContext().setAuthentication(
+                new UsernamePasswordAuthenticationToken("dev03", null,
+                        Collections.singletonList(new SimpleGrantedAuthority("0"))));
+        assertFalse(AccessControl.isAdmin());
+    }
+
+    /** 按 id 操作别人资源（IDOR）：管理员或属主放行，其余拒绝 */
+    @Test
+    public void ownerCheckAcceptsAdminAndOwnerOnly() {
+        loginAs("admin", SEED_ADMIN_ROLE);
+        assertNull("管理员可代管他人资源", AccessControl.denyUnlessAdminOrOwner(7, 99));
+
+        loginAs("dev10", NORMAL_ROLE);
+        assertNull("属主本人放行", AccessControl.denyUnlessAdminOrOwner(10, 10));
+        assertNotNull("别人的资源要拒绝", AccessControl.denyUnlessAdminOrOwner(11, 10));
+        assertNotNull("取不到当前用户 id 时不能默认放行", AccessControl.denyUnlessAdminOrOwner(10, null));
+        assertNotNull("user_id=0 是无主行，谁都不能按属主认领", AccessControl.denyUnlessAdminOrOwner(0, 0));
     }
 
     @Test

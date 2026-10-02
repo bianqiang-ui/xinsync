@@ -3,11 +3,17 @@ package com.wugui.datax.admin.controller;
 import com.baomidou.mybatisplus.extension.api.R;
 import com.wugui.datax.admin.entity.JobDatasource;
 import com.wugui.datax.admin.service.JobDatasourceService;
+import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.test.util.ReflectionTestUtils;
+
+import java.util.Collections;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -28,12 +34,43 @@ public class JobDatasourceControllerUpdateTest {
     private JobDatasourceController controller;
     private JobDatasourceService service;
 
+    /**
+     * 数据源是全平台共享的基础设施（job_datasource 没有属主列），写操作收归管理员，
+     * 所以这几条"NPE 回归"用例必须以管理员身份跑——否则测的是权限拒绝，不是空指针。
+     */
     @Before
     public void setUp() {
+        loginAs("admin", "ROLE_ADMIN");
         controller = new JobDatasourceController();
         service = Mockito.mock(JobDatasourceService.class);
         ReflectionTestUtils.setField(controller, "jobJdbcDatasourceService", service);
         when(service.updateById(any(JobDatasource.class))).thenReturn(true);
+    }
+
+    @After
+    public void tearDown() {
+        SecurityContextHolder.clearContext();
+    }
+
+    /**
+     * 与 JWTAuthorizationFilter 完全同形的登录态：principal 是用户名字符串，
+     * 权限走 normalizeRole。刻意不复用 JwtUser 形态，避免"测试形状与生产形状不一致"
+     * 让判定实现悄悄改成依赖 principal 类型也测不出来。
+     */
+    private static void loginAs(String username, String role) {
+        SecurityContextHolder.getContext().setAuthentication(
+                new UsernamePasswordAuthenticationToken(username, "x",
+                        Collections.singletonList(new SimpleGrantedAuthority(role))));
+    }
+
+    @Test
+    public void normalUserCannotUpdateDatasource() {
+        loginAs("devuser", "0");
+
+        R<Boolean> result = controller.update(datasource(1L, "root", "new-pass"));
+
+        assertFalse("普通用户不该能改数据源：" + result.getMsg(), result.ok());
+        verify(service, never()).updateById(any(JobDatasource.class));
     }
 
     @Test

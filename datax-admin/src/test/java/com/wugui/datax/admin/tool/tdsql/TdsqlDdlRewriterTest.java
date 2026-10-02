@@ -2,6 +2,7 @@ package com.wugui.datax.admin.tool.tdsql;
 
 import org.junit.Test;
 
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
@@ -92,7 +93,9 @@ public class TdsqlDdlRewriterTest {
         TdsqlDdlRewriter.Result r =
                 TdsqlDdlRewriter.rewrite(ORDERS, TdsqlTableType.SINGLE, null);
         assertTrue(r.getDdl(), r.isSuccess());
-        assertFalse(r.getDdl(), collapse(r.getDdl()).contains("SHARDKEY"));
+        // 只断"不含 SHARDKEY"是弱断言：返回空串、或把表体改坏了也照样绿。
+        // 单表的契约是原样返回，所以逐字比对（空白折叠后）。
+        assertEquals(collapse(ORDERS), collapse(r.getDdl()));
     }
 
     @Test
@@ -120,6 +123,10 @@ public class TdsqlDdlRewriterTest {
                 TdsqlDdlRewriter.rewrite(first.getDdl(), TdsqlTableType.SHARD, "uid");
 
         assertTrue(second.getDdl(), second.isSuccess());
+        // 真正的幂等判据：改写产物逐字相同。只数 SHARDKEY 条数或只看 notes，
+        // 挡不住"二次改写把 uid 再塞一遍主键列"这种破坏（PRIMARY KEY (`id`, `uid`, `uid`)）。
+        assertEquals("二次改写的 DDL 必须与第一次完全一致",
+                collapse(first.getDdl()), collapse(second.getDdl()));
         // 第二次不该再生成补列/补非空的说明（幂等）
         for (String note : second.getNotes()) {
             assertFalse(note, note.contains("已将"));
