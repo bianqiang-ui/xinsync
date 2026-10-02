@@ -260,7 +260,7 @@ This project is licensed under [MIT License](LICENSE).
 
 - **GitHub Issues**: [Submit](https://github.com/bianqiang-ui/xinsync/issues)
 - **WeChat**: `13898886628` (mention GitHub / Gitee when adding)
-- **Email**: bianqiang@gmail.com
+- **Email**: 997383@qq.com
 
 ---
 

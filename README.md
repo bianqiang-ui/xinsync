@@ -1,4 +1,4 @@
-# XinSync 信数通
+﻿# XinSync 信数通
 
 **信创数据同步，安全可控**
 
@@ -314,7 +314,7 @@ chore:    构建/工具变更
 
 - **GitHub Issues**：[提交问题](https://github.com/bianqiang-ui/xinsync/issues)
 - **微信**：`13898886628`（添加时请注明 GitHub / Gitee）
-- **邮箱**：bianqiang@gmail.com
+- **邮箱**：997383@qq.com
 
 ---
 
