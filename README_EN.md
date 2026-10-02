@@ -1,23 +1,12 @@
-<p align="center">
-  <h1 align="center">XinSync 信数通</h1>
-  <p align="center"><strong>Enterprise Data Sync, Secure & Controllable</strong></p>
-  <p align="center">Security-Hardened Data Integration Platform for Domestic IT Innovation Ecosystem</p>
-</p>
+﻿# XinSync 信数通
 
-<p align="center">
-  <a href="https://github.com/bianqiang-ui/xinsync/blob/master/LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License"></a>
-  <a href="https://github.com/bianqiang-ui/xinsync/releases"><img src="https://img.shields.io/badge/Version-2.1.2--xinsync-green.svg" alt="Version"></a>
-  <img src="https://img.shields.io/badge/JDK-1.8+-orange.svg" alt="JDK">
-  <img src="https://img.shields.io/badge/Spring%20Boot-2.1.x-brightgreen.svg" alt="Spring Boot">
-  <img src="https://img.shields.io/badge/Security-13%2F15%20Fixed-blueviolet.svg" alt="Security">
-</p>
+**Enterprise Data Sync, Secure & Controllable**
 
-<p align="center">
-  <a href="README.md">🇨🇳 中文</a> ·
-  <a href="README_EN.md">🇺🇸 English</a> ·
-  <a href="https://github.com/bianqiang-ui/xinsync">📦 GitHub</a> ·
-  <a href="https://gitee.com/brian888/xinsync">📦 Gitee (China Mirror)</a>
-</p>
+Security-Hardened Data Integration Platform for Domestic IT Innovation Ecosystem
+
+[![License MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/bianqiang-ui/xinsync/blob/master/LICENSE) [![Version](https://img.shields.io/badge/Version-2.1.2--xinsync-green.svg)](https://github.com/bianqiang-ui/xinsync/releases) ![JDK](https://img.shields.io/badge/JDK-1.8+-orange.svg) ![Spring Boot](https://img.shields.io/badge/Spring%20Boot-2.1.x-brightgreen.svg) ![Security](https://img.shields.io/badge/Security-13%2F15%20Fixed-blueviolet.svg)
+
+[中文](README.md) · [English](README_EN.md) · [GitHub](https://github.com/bianqiang-ui/xinsync) · [Gitee (China Mirror)](https://gitee.com/brian888/xinsync)
 
 ---
 
@@ -37,6 +26,60 @@ While the original DataX-Web provides a great UI for managing DataX jobs, it has
 > - ✅ Resolved **15 long-standing community Issues**
 > - 🏗️ Built **9 automated security gates** — one command to verify, zero regression
 > - 📝 Produced **1,290+ lines of dev log** and **270-line technical manual** — fully traceable
+
+## Architecture
+
+```mermaid
+graph TB
+    subgraph Web["XinSync Admin - Web UI"]
+        direction TB
+        SB["Spring Boot 2.1.x + Spring Security JWT + MyBatis"]
+        subgraph Modules["Core Modules"]
+            JM["Job Management"]
+            DS["DataSource Management"]
+            JB["JSON Builder & Scheduler"]
+        end
+        AC["AccessControl - Centralized Auth<br/>31 Authorization Seams"]
+        SB --> Modules
+        Modules --> AC
+    end
+
+    subgraph Executor["XinSync Executor - Cluster"]
+        direction TB
+        subgraph Workers["Execution Components"]
+            DX["DataX Engine"]
+            SC["Script Executor"]
+            PM["Process Monitor"]
+        end
+        JP["JobParamSafety<br/>Command Injection Dual-Gate"]
+        Workers --> JP
+    end
+
+    subgraph Security["Security Layer"]
+        direction LR
+        HW["Hessian Whitelist<br/>Deserialization"]
+        SI["SqlSafeIdentifier<br/>SQL Injection Guard"]
+        CM["Credential Masking<br/>API / Logs / Files"]
+        GS["GLUE Script RCE<br/>Admin-Only"]
+    end
+
+    subgraph DataSources["Data Sources"]
+        direction LR
+        MySQL
+        PostgreSQL
+        Oracle
+        TDSQL
+        Hive
+        HBase
+        MongoDB
+        ClickHouse
+    end
+
+    Web -->|"Hessian RPC<br/>(Whitelist Serialization)"| Executor
+    Executor --> DataSources
+    Security -.->|"Protection"| Web
+    Security -.->|"Protection"| Executor
+```
 
 ### Key Differences from Original
 
@@ -183,15 +226,11 @@ If XinSync helps you, consider supporting the project!
 
 ### WeChat Pay
 
-<p align="center">
-  <img src="doc/sponsor/wechat-pay.png" alt="WeChat Pay" width="280">
-</p>
+![WeChat Pay](doc/sponsor/wechat-pay.png)
 
 ### Alipay
 
-<p align="center">
-  <img src="doc/sponsor/ali-pay.jpg" alt="Alipay" width="280">
-</p>
+![Alipay](doc/sponsor/ali-pay.jpg)
 
 ### Other Ways to Support
 
