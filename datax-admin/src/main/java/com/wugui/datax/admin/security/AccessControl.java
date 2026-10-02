@@ -36,6 +36,15 @@ public final class AccessControl {
     private static final String NO_ADMIN_MSG = "该操作需要管理员权限";
     private static final String NO_OWNER_MSG = "只能操作本人的资源，需要代管请交给管理员执行";
 
+    /**
+     * 新建类接口用得上：归属要落在一个真实的人身上，判据取不到就不能建。
+     *
+     * 见 {@code BaseController#getCurrentUserId} —— 它现在返回 null 而不是抛异常；
+     * 而 JobInfo/JobTemplate/JobProject 的 userId 是 {@code int}，直接
+     * {@code setUserId(null)} 会在拆箱那一刻抛 NPE，用户看到的是 500。
+     */
+    public static final String NO_LOGIN_MSG = "未识别到登录用户，请重新登录后再试";
+
     private AccessControl() {
     }
 

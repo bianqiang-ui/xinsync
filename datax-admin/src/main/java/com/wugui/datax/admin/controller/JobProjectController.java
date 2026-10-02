@@ -77,7 +77,13 @@ public class JobProjectController extends BaseController {
     @ApiOperation("新增数据")
     @PostMapping
     public R<Boolean> insert(HttpServletRequest request, @RequestBody JobProject entity) {
-        entity.setUserId(getCurrentUserId(request));
+        // JobProject.userId 是 int，getCurrentUserId 返回 null 时直接 setUserId 会拆箱 NPE（500）；
+        // 项目无主之后 denyUnlessAdminOrOwner 永远判不过，等于建出一个谁都改不了的孤儿项目。
+        Integer currentUserId = getCurrentUserId(request);
+        if (currentUserId == null) {
+            return failed(AccessControl.NO_LOGIN_MSG);
+        }
+        entity.setUserId(currentUserId.intValue());
         return success(this.jobProjectService.save(entity));
     }
 

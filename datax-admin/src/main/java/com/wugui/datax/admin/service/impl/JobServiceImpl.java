@@ -176,10 +176,14 @@ public class JobServiceImpl implements JobService {
      *
      * 这几个字段不是数据，是会被拼进 datax.py 命令行的片段 —— 见
      * {@link JobParamSafety}（datax.py 收尾是 Popen(cmd, shell=True)）。
+     *
+     * incrementType 一起传：后三段只有对上特定增量类型才会被执行器拼进命令行，
+     * 拿不相干的字段去拒任务是守卫过宽（存量任务常见"改用主键增量、partition_info 还留着老值"）。
      */
     private static String jobParamDenyMessage(JobInfo jobInfo) {
         return JobParamSafety.denyMessage(jobInfo.getJvmParam(), jobInfo.getReplaceParam(),
-                jobInfo.getReplaceParamType(), jobInfo.getPartitionInfo());
+                jobInfo.getReplaceParamType(), jobInfo.getPartitionInfo(),
+                Integer.valueOf(jobInfo.getIncrementType()));
     }
 
     @Override
@@ -212,6 +216,17 @@ public class JobServiceImpl implements JobService {
         String paramDeny = jobParamDenyMessage(jobInfo);
         if (paramDeny != null) {
             return new ReturnT<>(ReturnT.FAIL_CODE, paramDeny);
+        }
+
+        // 原先这段确实写了，但排在 copyProperties(jobInfo, exists_jobInfo) 之后 —— 改的是已经
+        // 拷贝完的那个源对象，对落库的 exists 一点作用都没有（改了个没用的对象）。必须在拷贝前归一。
+        //
+        // 这里刻意不照抄 add 的"不在下拉列表就降级成 Timestamp"：上面 jobParamDenyMessage 已经把
+        // 带 shell 元字符的样式和 SimpleDateFormat 认不出的样式都拒掉了，剩下的都是合法日期样式
+        // （如 yyyy-MM-dd HH:mm:ss）。add 那条白名单会把它们静默改成 Timestamp，等于偷偷换掉
+        // 用户 WHERE 条件的语义；update 再做一遍只会把这个缺陷扩大到存量任务。
+        if (StringUtils.isBlank(jobInfo.getReplaceParamType())) {
+            jobInfo.setReplaceParamType(DateFormatUtils.TIMESTAMP);
         }
 
         // ChildJobId valid
@@ -268,9 +283,6 @@ public class JobServiceImpl implements JobService {
         }
 
         BeanUtils.copyProperties(jobInfo, exists_jobInfo);
-        if (StringUtils.isBlank(jobInfo.getReplaceParamType())) {
-            jobInfo.setReplaceParamType(DateFormatUtils.TIMESTAMP);
-        }
         exists_jobInfo.setTriggerNextTime(nextTriggerTime);
         exists_jobInfo.setUpdateTime(new Date());
 
@@ -453,8 +465,11 @@ public class JobServiceImpl implements JobService {
         DataXJsonBuildDto jsonBuild = new DataXJsonBuildDto();
 
         // 模板带 jvmParam，下面的 copyProperties 会把它原样拷进每一个新建任务：
-        // 这道口子不判，add/update 上的校验就白做了 —— 一次批量能建出一整批带载荷的任务
-        String templateParamDeny = JobParamSafety.denyMessage(jobTemplate.getJvmParam(), null, null, null);
+        // 这道口子不判，add/update 上的校验就白做了 —— 一次批量能建出一整批带载荷的任务。
+        // 后三段传 null 不是偷懒：JobTemplate 实体里根本没有 replaceParam/replaceParamType/
+        // partitionInfo 这三列（对照 entity/JobTemplate.java 的字段表），copyProperties 拷不出它们，
+        // 新建任务的 incrementType 取默认值 0，执行器那三段一个都不读。
+        String templateParamDeny = JobParamSafety.denyMessage(jobTemplate.getJvmParam(), null, null, null, null);
         if (templateParamDeny != null) {
             return new ReturnT<>(ReturnT.FAIL_CODE, templateParamDeny);
         }

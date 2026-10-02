@@ -81,7 +81,10 @@ public class BuildCommand {
 
             if (IncrementTypeEnum.TIME.getCode() == incrementType) {
                 if (doc.length() > 0) doc.append(SPLIT_SPACE);
-                String replaceParamType = tgParam.getReplaceParamType();
+                // 跟着管理端的判定一起 trim：库里历史行可能是 " Timestamp " 或 " yyyy-MM-dd "，
+                // 原先直接拿原始串 equals("Timestamp")，这类值会被当成日期样式，
+                // 于是 sdf.format() 产出带空格的两端又被替换成 %，拼进 -p"..." 后 WHERE 条件是坏的。
+                String replaceParamType = StringUtils.trimToNull(tgParam.getReplaceParamType());
 
                 if (StringUtils.isBlank(replaceParamType) || replaceParamType.equals("Timestamp")) {
                     long startTime = tgParam.getStartTime().getTime() / 1000;
@@ -127,9 +130,12 @@ public class BuildCommand {
     }
 
     private static String buildPartition(List<String> partitionInfo) {
-        String field = partitionInfo.get(0);
-        int timeOffset = Integer.parseInt(partitionInfo.get(1));
-        String timeFormat = partitionInfo.get(2);
+        // 三段都 trim：与 datax-core 的 JobParamSafety 口径一致（那边判的也是 trim 后的片段）。
+        // 不 trim 的话 "ds , 0 , yyyy-MM-dd" 这种手写带空格的合法配置会在此处抛
+        // NumberFormatException，任务日志只有一行堆栈，而管理端却告诉用户这是合法输入。
+        String field = partitionInfo.get(0).trim();
+        int timeOffset = Integer.parseInt(partitionInfo.get(1).trim());
+        String timeFormat = partitionInfo.get(2).trim();
         String partitionTime = DateUtil.format(DateUtil.addDays(new Date(), timeOffset), timeFormat);
         return field + Constants.EQUAL + partitionTime;
     }

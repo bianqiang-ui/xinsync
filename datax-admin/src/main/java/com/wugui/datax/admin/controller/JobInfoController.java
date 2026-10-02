@@ -78,7 +78,14 @@ public class JobInfoController extends BaseController{
     @PostMapping("/add")
     @ApiOperation("添加任务")
     public ReturnT<String> add(HttpServletRequest request, @RequestBody JobInfo jobInfo) {
-        jobInfo.setUserId(getCurrentUserId(request));
+        // JobInfo.userId 是基本类型 int，而 getCurrentUserId 在登录态失效时返回 null（批次10-D 的口径），
+        // 直接传进 setUserId 就是拆箱 NPE → 500。归属判据取不到必须明确拒，
+        // 不能靠异常形态"失败"，更不能默认成 0（0 在别的接口里是"管理员/全部"的语义）。
+        Integer currentUserId = getCurrentUserId(request);
+        if (currentUserId == null) {
+            return new ReturnT<>(ReturnT.FAIL_CODE, AccessControl.NO_LOGIN_MSG);
+        }
+        jobInfo.setUserId(currentUserId.intValue());
         return jobService.add(jobInfo);
     }
 
