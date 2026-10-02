@@ -224,13 +224,9 @@ See [CHANGELOG.md](CHANGELOG.md) for full details.
 
 If XinSync helps you, consider supporting the project!
 
-### WeChat Pay
-
-![WeChat Pay](doc/sponsor/wechat-pay.png)
-
-### Alipay
-
-![Alipay](doc/sponsor/ali-pay.jpg)
+| WeChat Pay | Alipay |
+|:---:|:---:|
+| ![WeChat](doc/sponsor/wechat-pay.png) | ![Alipay](doc/sponsor/ali-pay.jpg) |
 
 ### Other Ways to Support
 

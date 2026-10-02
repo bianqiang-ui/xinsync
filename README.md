@@ -262,13 +262,9 @@ XinSync 信数通特别适配了信创生态中常见的数据库和场景：
 
 如果 XinSync 信数通对你有帮助，欢迎赞助支持项目持续发展！
 
-### 微信赞赏
-
-![微信赞赏码](doc/sponsor/wechat-pay.png)
-
-### 支付宝赞赏
-
-![支付宝赞赏码](doc/sponsor/ali-pay.jpg)
+| 微信赞赏 | 支付宝赞赏 |
+|:---:|:---:|
+| ![微信](doc/sponsor/wechat-pay.png) | ![支付宝](doc/sponsor/ali-pay.jpg) |
 
 ### 其他支持方式
 
