@@ -73,13 +73,22 @@ public class JobLogController {
     @RequestMapping(value = "/logDetailCat", method = RequestMethod.GET)
     @ApiOperation("运行日志详情")
     public ReturnT<LogResult> logDetailCat(String executorAddress, long triggerTime, long logId, int fromLineNum) {
+        // executorAddress 必须由库里的执行记录说了算：原先它直接来自查询参数，
+        // 这个接口就成了"让 admin 去访问任意地址"的探测器，而且 accessToken 会随请求头发到对方主机。
+        JobLog jobLog = jobLogMapper.load(logId);
+        if (jobLog == null) {
+            return new ReturnT<>(ReturnT.FAIL_CODE, "执行记录不存在，logId = " + logId);
+        }
+        if (jobLog.getExecutorAddress() == null || !jobLog.getExecutorAddress().equals(executorAddress)) {
+            logger.warn(">>>>>>>>>>> datax-web, logDetailCat rejected, logId={} 的登记地址与请求地址不一致", logId);
+            return new ReturnT<>(ReturnT.FAIL_CODE, "执行器地址与该执行记录不匹配");
+        }
         try {
             ExecutorBiz executorBiz = JobScheduler.getExecutorBiz(executorAddress);
             ReturnT<LogResult> logResult = executorBiz.log(triggerTime, logId, fromLineNum);
 
             // is end
             if (logResult.getContent() != null && fromLineNum > logResult.getContent().getToLineNum()) {
-                JobLog jobLog = jobLogMapper.load(logId);
                 if (jobLog.getHandleCode() > 0) {
                     logResult.getContent().setEnd(true);
                 }
@@ -168,6 +177,17 @@ public class JobLogController {
     @ApiOperation("停止该job作业")
     @PostMapping("/killJob")
     public ReturnT<String> killJob(@RequestBody JobLog log) {
-        return KillJob.trigger(log.getId(), log.getTriggerTime(), log.getExecutorAddress(), log.getProcessId());
+        // 只认库里那条执行记录。原先 executorAddress / processId 全部取自请求体，
+        // 任何登录用户都能借 admin 往任意地址下发 kill，并让执行器杀掉任意 PID（accessToken 也一并外送）。
+        JobLog stored = jobLogMapper.load(log.getId());
+        if (stored == null) {
+            return new ReturnT<>(ReturnT.FAIL_CODE, "执行记录不存在，logId = " + log.getId());
+        }
+        if (stored.getExecutorAddress() == null || stored.getExecutorAddress().trim().length() == 0
+                || stored.getProcessId() == null || stored.getProcessId().trim().length() == 0) {
+            return new ReturnT<>(ReturnT.FAIL_CODE, "该执行记录没有登记执行器地址或进程号，无法终止");
+        }
+        return KillJob.trigger(stored.getId(), stored.getTriggerTime(),
+                stored.getExecutorAddress(), stored.getProcessId());
     }
 }

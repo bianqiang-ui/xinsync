@@ -3,6 +3,7 @@ package com.wugui.datax.admin.filter;
 import com.alibaba.fastjson.JSON;
 import com.baomidou.mybatisplus.extension.api.R;
 import com.wugui.datax.admin.exception.TokenIsExpiredException;
+import com.wugui.datax.admin.security.AccessControl;
 import com.wugui.datax.admin.util.JwtTokenUtils;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -62,8 +63,11 @@ public class JWTAuthorizationFilter extends BasicAuthenticationFilter {
             String username = JwtTokenUtils.getUsername(token);
             String role = JwtTokenUtils.getUserRole(token);
             if (username != null) {
+                // role 从 token 里取，可能是 null 或空串（老 token、或建号时没填 role）。
+                // SimpleGrantedAuthority 对空串直接抛 IllegalArgumentException，而这个 filter 只 catch
+                // TokenIsExpiredException，一抛就是整个请求 500 —— 每个接口都挂。
                 return new UsernamePasswordAuthenticationToken(username, null,
-                        Collections.singleton(new SimpleGrantedAuthority(role))
+                        Collections.singleton(new SimpleGrantedAuthority(AccessControl.normalizeRole(role)))
                 );
             }
         }
