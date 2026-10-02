@@ -183,16 +183,23 @@ public class JobThread extends Thread {
 
                 JobLogger.log("<br>----------- JobThread Exception:" + errorMsg + "<br>----------- datax-web job execute end(error) -----------");
             } finally {
-                // 终止操作暂不监控状态
-                if (tgParam != null && tgParam.getJobId() != -1) {
-                    // callback handler info
-                    if (!toStop) {
-                        // commonm
-                        TriggerCallbackThread.pushCallBack(new HandleCallbackParam(tgParam.getLogId(), tgParam.getLogDateTime(), executeResult));
-                    } else {
-                        // is killed
-                        ReturnT<String> stopResult = new ReturnT<String>(ReturnT.FAIL_CODE, stopReason + " [job running, killed]");
-                        TriggerCallbackThread.pushCallBack(new HandleCallbackParam(tgParam.getLogId(), tgParam.getLogDateTime(), stopResult));
+                if (tgParam != null) {
+                    // 触发之间线程会空闲到下一次（最长 90s 空轮询才退出），期间 contextHolder 留着上一次的值，
+                    // 任何非本次触发的 JobLogger 输出都会串进上一个任务的日志文件；分片上下文同理，用完就清
+                    JobFileAppender.contextHolder.remove();
+                    ShardingUtil.removeShardingVo();
+
+                    // 终止操作暂不监控状态
+                    if (tgParam.getJobId() != -1) {
+                        // callback handler info
+                        if (!toStop) {
+                            // commonm
+                            TriggerCallbackThread.pushCallBack(new HandleCallbackParam(tgParam.getLogId(), tgParam.getLogDateTime(), executeResult));
+                        } else {
+                            // is killed
+                            ReturnT<String> stopResult = new ReturnT<String>(ReturnT.FAIL_CODE, stopReason + " [job running, killed]");
+                            TriggerCallbackThread.pushCallBack(new HandleCallbackParam(tgParam.getLogId(), tgParam.getLogDateTime(), stopResult));
+                        }
                     }
                 }
             }

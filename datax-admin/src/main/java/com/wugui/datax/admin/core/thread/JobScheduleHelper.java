@@ -31,12 +31,15 @@ public class JobScheduleHelper {
 
     private static final long ITEM_ERROR_LOG_INTERVAL_MS = 5 * 60 * 1000L;
 
+    private static final long MISFIRE_LOG_INTERVAL_MS = 5 * 60 * 1000L;
+
     private Thread scheduleThread;
     private Thread ringThread;
     private volatile boolean scheduleThreadToStop = false;
     private volatile boolean ringThreadToStop = false;
     private volatile static Map<Integer, List<Integer>> ringData = new ConcurrentHashMap<>();
     private final Map<Integer, Long> itemErrorLogTime = new ConcurrentHashMap<>();
+    private final Map<Integer, Long> misfireLogTime = new ConcurrentHashMap<>();
 
     public void start() {
 
@@ -240,7 +243,11 @@ public class JobScheduleHelper {
         // time-ring jump
         if (nowTime > jobInfo.getTriggerNextTime() + PRE_READ_MS) {
             // 2.1、trigger-expire > 5s：pass && make next-trigger-time
-            logger.warn(">>>>>>>>>>> datax-web, schedule misfire, jobId = " + jobInfo.getId());
+            // cron 非法时下面的 refreshNextValidTime 会抛异常、next 时间原地不动，这个分支每个扫描周期（约 5s）都会再进来一次，
+            // 所以 WARN 必须按 job 限流，否则一个坏任务每小时能写 700 多条日志
+            if (shouldLogThrottled(misfireLogTime, jobInfo.getId(), MISFIRE_LOG_INTERVAL_MS)) {
+                logger.warn(">>>>>>>>>>> datax-web, schedule misfire, jobId = " + jobInfo.getId());
+            }
 
             // fresh next
             refreshNextValidTime(jobInfo, new Date());
@@ -289,15 +296,26 @@ public class JobScheduleHelper {
      */
     private void logScheduleItemError(JobInfo jobInfo, Exception e) {
         Integer jobId = jobInfo.getId();
-        long now = System.currentTimeMillis();
-        Long last = itemErrorLogTime.get(jobId);
-        if (last != null && now - last < ITEM_ERROR_LOG_INTERVAL_MS) {
+        if (!shouldLogThrottled(itemErrorLogTime, jobId, ITEM_ERROR_LOG_INTERVAL_MS)) {
             return;
         }
-        itemErrorLogTime.put(jobId, now);
         // 用字符串拼接而不是 {} 占位符：异常作为最后一个参数时占位符不会被替换，栈也丢了
         logger.error(">>>>>>>>>>> datax-web, schedule item skipped, jobId = " + jobId
                 + ", cron = [" + jobInfo.getJobCron() + "]", e);
+    }
+
+    /**
+     * 按 jobId 限流：同一个 job 的一类日志在 interval 内只留一条。
+     * 坏 cron 的任务每个扫描周期都会再撞一次，不限流就是每小时七百多条重复。
+     */
+    private static boolean shouldLogThrottled(Map<Integer, Long> lastLogTime, Integer jobId, long intervalMs) {
+        long now = System.currentTimeMillis();
+        Long last = lastLogTime.get(jobId);
+        if (last != null && now - last < intervalMs) {
+            return false;
+        }
+        lastLogTime.put(jobId, now);
+        return true;
     }
 
     private void refreshNextValidTime(JobInfo jobInfo, Date fromTime) throws ParseException {
