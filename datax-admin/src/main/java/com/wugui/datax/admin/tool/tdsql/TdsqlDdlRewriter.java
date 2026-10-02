@@ -75,8 +75,11 @@ public final class TdsqlDdlRewriter {
         }
 
         if (tableType == TdsqlTableType.BROADCAST) {
+            boolean alreadyKeyed = hasShardKeyClause(createDdl);
             String ddl = appendClause(createDdl, close, BROADCAST_SHARDKEY);
-            notes.add("广播表：SHARDKEY = " + BROADCAST_SHARDKEY + "，每个分片各存一份全量，主键/唯一索引不需补列");
+            notes.add(alreadyKeyed
+                    ? "广播表：DDL 里已有 SHARDKEY 子句，未重复追加"
+                    : "广播表：SHARDKEY = " + BROADCAST_SHARDKEY + "，每个分片各存一份全量，主键/唯一索引不需补列");
             return new Result(true, ddl, notes);
         }
 
@@ -132,8 +135,11 @@ public final class TdsqlDdlRewriter {
 
         String body = join(items);
         String ddl = createDdl.substring(0, open + 1) + body + createDdl.substring(close);
+        boolean alreadyKeyed = hasShardKeyClause(ddl);
         ddl = appendClause(ddl, matchingParen(ddl, ddl.indexOf('(')), key);
-        notes.add("已追加 SHARDKEY = " + key + " 子句（子句在真实例上的确切位置待实测校准）");
+        notes.add(alreadyKeyed
+                ? "DDL 里已有 SHARDKEY 子句，未重复追加（重复子句会让建表语句不合法）"
+                : "已追加 SHARDKEY = " + key + " 子句（子句在真实例上的确切位置待实测校准）");
         return new Result(true, ddl, notes);
     }
 
@@ -245,23 +251,52 @@ public final class TdsqlDdlRewriter {
 
     private static boolean isIndexDef(String t) {
         String u = toUpperCase(t);
-        return u.startsWith("PRIMARY KEY") || u.startsWith("UNIQUE KEY") || u.startsWith("UNIQUE INDEX")
-                || u.startsWith("KEY") || u.startsWith("INDEX") || u.startsWith("FULLTEXT");
+        return startsWithKeyword(u, "PRIMARY KEY") || startsWithKeyword(u, "UNIQUE KEY")
+                || startsWithKeyword(u, "UNIQUE INDEX") || startsWithKeyword(u, "KEY")
+                || startsWithKeyword(u, "INDEX") || startsWithKeyword(u, "FULLTEXT");
     }
 
     private static boolean isConstraintDef(String t) {
         String u = toUpperCase(t);
-        return u.startsWith("CONSTRAINT") || u.startsWith("FOREIGN KEY") || u.startsWith("CHECK");
+        return startsWithKeyword(u, "CONSTRAINT") || startsWithKeyword(u, "FOREIGN KEY")
+                || startsWithKeyword(u, "CHECK");
+    }
+
+    /**
+     * 关键字必须是独立 token：不带反引号的列名 key_id / check_time 以 KEY、CHECK 的字母开头，
+     * 直接用 startsWith 会把列定义误判成索引/约束定义，分片键就会"在表里不存在"。
+     */
+    private static boolean startsWithKeyword(String upper, String keyword) {
+        if (!upper.startsWith(keyword)) {
+            return false;
+        }
+        int next = keyword.length();
+        return next >= upper.length() || !isWordChar(upper.charAt(next));
+    }
+
+    private static boolean isWordChar(char c) {
+        return Character.isLetterOrDigit(c) || c == '_';
     }
 
     private static boolean isPrimaryKey(String item) {
-        return toUpperCase(item.trim()).startsWith("PRIMARY KEY");
+        return startsWithKeyword(toUpperCase(item.trim()), "PRIMARY KEY");
     }
 
+    /**
+     * 唯一索引的三种写法都要认出来：
+     *   UNIQUE KEY `x` (...) / UNIQUE INDEX ... / UNIQUE (...)
+     *   CONSTRAINT `x` UNIQUE (...)   ← mysqldump 5.7+ 对 InnoDB 唯一约束就产出这个形态
+     * 漏认最后一种 = 分片键没进唯一索引 = 生成的 DDL 在 TDSQL 上直接建表失败。
+     */
     private static boolean isUniqueKey(String item) {
         String u = toUpperCase(item.trim());
-        return u.startsWith("UNIQUE KEY") || u.startsWith("UNIQUE INDEX") || u.startsWith("UNIQUE (");
+        return startsWithKeyword(u, "UNIQUE KEY") || startsWithKeyword(u, "UNIQUE INDEX")
+                || startsWithKeyword(u, "UNIQUE")
+                || (startsWithKeyword(u, "CONSTRAINT") && CONSTRAINT_HAS_UNIQUE.matcher(u).find());
     }
+
+    private static final java.util.regex.Pattern CONSTRAINT_HAS_UNIQUE =
+            java.util.regex.Pattern.compile("\\bUNIQUE\\b");
 
     /** `uid` bigint(20) NOT NULL -> uid */
     private static String columnName(String item) {
@@ -369,6 +404,10 @@ public final class TdsqlDdlRewriter {
         if (key == null) {
             return ddl;
         }
+        if (hasShardKeyClause(ddl)) {
+            // 幂等：二次改写若再追加一条 SHARDKEY，产物就是语法不合法的 DDL
+            return ddl;
+        }
         String clause = BROADCAST_SHARDKEY.equals(key)
                 ? " SHARDKEY = " + key
                 : " SHARDKEY = `" + key + "`";
@@ -377,6 +416,56 @@ public final class TdsqlDdlRewriter {
             return ddl.substring(0, semi) + clause + ddl.substring(semi);
         }
         return ddl + clause;
+    }
+
+    /**
+     * 是否已经带 SHARDKEY 子句。只在非引号区里找独立 token，
+     * 免得某个列/约束恰好叫 `shardkey_time` 就被误判成"已分片"。
+     */
+    private static boolean hasShardKeyClause(String ddl) {
+        if (ddl == null) {
+            return false;
+        }
+        String u = toUpperCase(ddl);
+        int from = 0;
+        while (true) {
+            int idx = u.indexOf("SHARDKEY", from);
+            if (idx < 0) {
+                return false;
+            }
+            if (inQuotedRegion(ddl, idx)) {
+                from = idx + 1;
+                continue;
+            }
+            boolean leftOk = idx == 0 || !isWordChar(ddl.charAt(idx - 1));
+            int right = idx + "SHARDKEY".length();
+            boolean rightOk = right >= ddl.length() || !isWordChar(ddl.charAt(right));
+            if (leftOk && rightOk) {
+                return true;
+            }
+            from = right;
+        }
+    }
+
+    /** 该下标是否落在反引号/引号包裹的标识符里 */
+    private static boolean inQuotedRegion(String ddl, int pos) {
+        int i = 0;
+        while (i < pos) {
+            char c = ddl.charAt(i);
+            if (c == '`' || c == '\'' || c == '"') {
+                int end = skipQuoted(ddl, i, c);
+                if (end < 0) {
+                    return false;
+                }
+                if (pos > i && pos <= end) {
+                    return true;
+                }
+                i = end + 1;
+                continue;
+            }
+            i++;
+        }
+        return false;
     }
 
     private static String trimIdentifier(String s) {
