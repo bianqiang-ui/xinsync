@@ -1,6 +1,6 @@
 package com.wugui.datax.admin.util;
 
-import com.alibaba.fastjson.JSON;
+import com.wugui.datatx.core.util.Constants;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.ExpiredJwtException;
 import io.jsonwebtoken.Jwts;
@@ -96,11 +96,35 @@ public class JwtTokenUtils {
         return userInfo.get(1);
     }
 
-    // 从token中获取用户名
+    /**
+     * 从 token 中取调用者 id。
+     *
+     * 归属判定把 null 当成"没有身份"，按最小权限拒绝 —— 所以这里解不出来时必须返回 null，
+     * 而不是让 parseInteger 的 NumberFormatException 或下标越界把请求顶成 500：
+     * 一个手工拼造的 Bearer 头就能让每个接口都报"系统异常"，还把原始异常盖掉了。
+     */
     public static Integer getUserId(String token) {
-        String s= JSON.toJSONString(getTokenBody(token).getSubject());
-        List<String> userInfo = Arrays.asList(getTokenBody(token).getSubject().split(SPLIT_COMMA));
-        return Integer.parseInt(userInfo.get(0));
+        String subject;
+        try {
+            subject = getTokenBody(token).getSubject();
+        } catch (Exception e) {
+            LOGGER.warn("JWT 解析失败，按未登录处理：{}", e.getClass().getSimpleName());
+            return null;
+        }
+        if (subject == null) {
+            return null;
+        }
+        String[] userInfo = subject.split(SPLIT_COMMA);
+        if (userInfo.length < 2) {
+            LOGGER.warn("JWT subject 形状不对（应为 \"id,username\"），按未登录处理");
+            return null;
+        }
+        try {
+            return Integer.parseInt(userInfo[0].trim());
+        } catch (NumberFormatException e) {
+            LOGGER.warn("JWT subject 里的 id 不是数字：{}，按未登录处理", userInfo[0]);
+            return null;
+        }
     }
 
     // 获取用户角色
