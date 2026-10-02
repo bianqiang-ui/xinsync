@@ -61,4 +61,51 @@
         <log4j2.version>2.17.2</log4j2.version>
     </properties>
 
+    <!--
+        版本 pin 上移到根 pom：之前 log4j2 与 logback 的 pin 只在 datax-admin/pom.xml 里，
+        执行器部署包仍带旧版（logback 1.2.3 / log4j-api 2.11.2）。
+        dependencyManagement 在根 pom 声明后，所有子模块（含 datax-executor）自动继承。
+    -->
+    <dependencyManagement>
+        <dependencies>
+            <!-- logback classic + core 必须成对声明同一版本，否则 NoSuchMethodError -->
+            <dependency>
+                <groupId>ch.qos.logback</groupId>
+                <artifactId>logback-classic</artifactId>
+                <version>${logback-classic.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>ch.qos.logback</groupId>
+                <artifactId>logback-core</artifactId>
+                <version>${logback-classic.version}</version>
+            </dependency>
+            <!-- log4j2 五件套，全部压到安全版本 -->
+            <dependency>
+                <groupId>org.apache.logging.log4j</groupId>
+                <artifactId>log4j-api</artifactId>
+                <version>${log4j2.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.logging.log4j</groupId>
+                <artifactId>log4j-core</artifactId>
+                <version>${log4j2.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.logging.log4j</groupId>
+                <artifactId>log4j-1.2-api</artifactId>
+                <version>${log4j2.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.logging.log4j</groupId>
+                <artifactId>log4j-web</artifactId>
+                <version>${log4j2.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.logging.log4j</groupId>
+                <artifactId>log4j-to-slf4j</artifactId>
+                <version>${log4j2.version}</version>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
 </project>

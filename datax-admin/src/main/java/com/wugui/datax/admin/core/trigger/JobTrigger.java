@@ -286,7 +286,12 @@ public class JobTrigger {
             runResult = executorBiz.run(triggerParam);
         } catch (Exception e) {
             logger.error(">>>>>>>>>>> datax-web trigger error, please check if the executor[{}] is running.", address, e);
-            runResult = new ReturnT<String>(ReturnT.FAIL_CODE, ThrowableUtil.toString(e));
+            // 异常堆栈可能包含完整的 TriggerParam（含解密后的 jobJson、glueSource、accessToken），
+            // 这些内容会被写进 job_log.trigger_msg 持久化到库里，日志面越权之后就是明文口令泄漏。
+            // 只保留异常类名和消息，不保留完整堆栈。
+            String safeMsg = e.getClass().getSimpleName()
+                    + (e.getMessage() != null ? ": " + sanitizeTriggerMsg(e.getMessage()) : "");
+            runResult = new ReturnT<String>(ReturnT.FAIL_CODE, safeMsg);
         }
 
         StringBuffer runResultSB = new StringBuffer(I18nUtil.getString("jobconf_trigger_run") + "：");
@@ -296,6 +301,28 @@ public class JobTrigger {
 
         runResult.setMsg(runResultSB.toString());
         return runResult;
+    }
+
+    /**
+     * 从 trigger_msg 里擦除可能包含的口令。
+     *
+     * jobJson 里的 "username":"xxx", "password":"xxx" 与 accessToken 值是最常见的泄漏位置：
+     * RPC 超时时异常信息可能把完整的 TriggerParam.toString() 带出来。
+     * 这里用正则替换而不是完全丢弃，保留故障定位所需的上下文。
+     */
+    private static String sanitizeTriggerMsg(String msg) {
+        if (msg == null) {
+            return null;
+        }
+        // "password":"xxx" / "username":"xxx" / "accessToken":"xxx" → "password":"******"
+        String sanitized = msg.replaceAll(
+                "\"(password|username|accessToken)\"\\s*:\\s*\"[^\"]*\"",
+                "\"$1\":\"******\"");
+        // password=xxx&  或  password=xxx 在 URL 风格参数里
+        sanitized = sanitized.replaceAll(
+                "(password|accessToken)=([^&\\s\"']+)",
+                "$1=******");
+        return sanitized;
     }
 
 }
