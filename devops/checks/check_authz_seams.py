@@ -35,6 +35,8 @@ KINDS = {
     "self": r"AccessControl\.requireSelfOrAdmin\s*\(",
     "owner": r"(?:AccessControl\.denyUnlessAdminOrOwner|denyUnlessCanOperate)\s*\(",
     "stored": r"jobLogMapper\.load\s*\(",
+    # GLUE 脚本型任务的守卫：denyGlueScriptIfNotAdmin 内部走 AccessControl.isAdmin()
+    "glue_script": r"denyGlueScriptIfNotAdmin\s*\(",
 }
 
 # (文件, 方法名, 判定类型)
@@ -74,6 +76,13 @@ RULES = [
     ("controller/JobDatasourceController.java", "update", "admin"),
     ("controller/JobDatasourceController.java", "delete", "admin"),
     ("controller/JobDatasourceController.java", "dataSourceTest", "admin"),
+    # buildJson 返回的 JSON 包含数据源明文口令，必须管理员
+    ("controller/DataxJsonController.java", "buildJobJson", "admin"),
+    # GLUE 脚本型任务（Shell/Python/…）的 add/update 收归管理员：
+    # ScriptJobHandler → ScriptUtil.markScriptFile → Runtime.exec，
+    # 脚本内容本身就是命令，参数守卫对它无效。
+    ("controller/JobInfoController.java", "add", "glue_script"),
+    ("controller/JobInfoController.java", "update", "glue_script"),
 ]
 
 

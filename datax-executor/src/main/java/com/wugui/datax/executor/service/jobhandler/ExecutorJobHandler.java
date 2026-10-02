@@ -135,12 +135,42 @@ public class ExecutorJobHandler extends IJobHandler {
         // 配置的 jsonpath 不带结尾分隔符，直接字符串拼接会生成 "…/data/jsonjobTmp-xxx.conf"
         String tmpFilePath = new File(jsonDir, "jobTmp-" + IdUtil.simpleUUID() + ".conf").getAbsolutePath();
         // 根据json写入到临时本地文件
-        try (PrintWriter writer = new PrintWriter(tmpFilePath, "UTF-8")) {
+        // 临时文件包含解密后的数据源明文口令，权限设为 owner 可读写（0600）：
+        // 进程被 kill 时 finally 里的删除可能跑不到，文件留在磁盘上如果是默认 umask（通常 0644）
+        // 则同机其他用户可直接读走口令。
+        File tmpFile = new File(tmpFilePath);
+        try (PrintWriter writer = new PrintWriter(tmpFile, "UTF-8")) {
             writer.println(jobJson);
         } catch (FileNotFoundException | UnsupportedEncodingException e) {
             JobLogger.log("JSON 临时文件写入异常：" + e.getMessage());
         }
+        // Java 6+ 的 setReadable/setWritable：第二个参数 ownerOnly=true 等效于 chmod 0600
+        tmpFile.setReadable(false, false);   // 先全部撤
+        tmpFile.setWritable(false, false);
+        tmpFile.setReadable(true, true);     // 只给 owner
+        tmpFile.setWritable(true, true);
         return tmpFilePath;
+    }
+
+    /**
+     * 启动时清理上一次进程异常退出可能残留的临时配置文件。
+     * 这些文件包含解密后的数据源明文口令。
+     */
+    public void cleanStaleTmpFiles() {
+        String dataXHomePath = SystemUtils.getDataXHomePath();
+        String jsonDir = StringUtils.isNotEmpty(dataXHomePath) ? dataXHomePath + DEFAULT_JSON : jsonPath;
+        File dir = new File(jsonDir);
+        if (!dir.isDirectory()) {
+            return;
+        }
+        File[] staleFiles = dir.listFiles((d, name) -> name.startsWith("jobTmp-") && name.endsWith(".conf"));
+        if (staleFiles != null) {
+            for (File f : staleFiles) {
+                if (f.delete()) {
+                    JobLogger.log("cleaned stale tmp file: " + f.getName());
+                }
+            }
+        }
     }
 
 }
