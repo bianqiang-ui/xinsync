@@ -44,4 +44,12 @@ public class ShardingUtil {
         return contextHolder.get();
     }
 
+    /**
+     * 清除本次触发写入的分片上下文。
+     * 子线程在创建时已经拷贝了一份 InheritableThreadLocal，父线程这里 remove 不会影响正在跑的超时线程。
+     */
+    public static void removeShardingVo() {
+        contextHolder.remove();
+    }
+
 }

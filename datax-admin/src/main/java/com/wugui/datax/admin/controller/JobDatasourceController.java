@@ -99,7 +99,12 @@ public class JobDatasourceController extends BaseController {
     public R<Boolean> update(@RequestBody JobDatasource entity) {
         LocalCacheUtil.remove(entity.getDatasourceName());
         JobDatasource d = jobJdbcDatasourceService.getById(entity.getId());
-        if (null != d.getJdbcUsername() && entity.getJdbcUsername().equals(d.getJdbcUsername())) {
+        if (d == null) {
+            return failed("数据源不存在，id = " + entity.getId());
+        }
+        // 更新接口允许只提交部分字段，所以比较要拿库里的值做主语：
+        // 原先写成 entity.getJdbcUsername().equals(...)，前端不传 jdbcUsername 时直接 NPE 成 500
+        if (null != d.getJdbcUsername() && d.getJdbcUsername().equals(entity.getJdbcUsername())) {
             entity.setJdbcUsername(null);
         }
         if (null != entity.getJdbcPassword() && entity.getJdbcPassword().equals(d.getJdbcPassword())) {
