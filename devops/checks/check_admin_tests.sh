@@ -13,6 +13,9 @@
 #      也不得按 id 操作别人的资源（IDOR）。
 #   5) JobServiceBatchAddOwnerTest —— 批量建任务的归属必须落到调用者本人：写路径开始判归属之后，
 #      沿用模板 copyProperties 带出来的 user_id 会让"普通用户批量建的一整批任务自己改不了"。
+#   6) SqlSafeIdentifierTest + BaseFormOrderByWhitelistTest —— 分页接口的 ascs/descs 与列查询 key
+#      是"用户可控且必然落进 SQL 结构位置"的字符串（mybatis-plus 的列名参数不走预编译），
+#      只许是裸列名；同时钉住合法用法（ascs=datasource_name、驼峰 key 规范化）不被白名单误杀。
 #
 # 判定标准与 TDSQL 门禁完全一致（同一个 lib）：测试没被编译/没跑起来，本身就判失败。
 set -u

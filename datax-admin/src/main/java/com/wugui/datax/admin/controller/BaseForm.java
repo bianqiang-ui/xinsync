@@ -8,6 +8,7 @@ import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.wugui.datax.admin.util.PageUtils;
 import com.wugui.datax.admin.util.ServletUtils;
+import com.wugui.datax.admin.util.SqlSafeIdentifier;
 import lombok.extern.slf4j.Slf4j;
 
 import javax.servlet.http.HttpServletRequest;
@@ -227,23 +228,29 @@ public class BaseForm {
         pageParams.forEach((k, v) -> {
             switch (k) {
                 case "ascs":
-                    queryWrapper.orderByAsc(StrUtil.toUnderlineCase(StrUtil.toString(v)));
+                    // 排序字段是拼进 SQL 结构位置的、前端可控的字符串，必须逐个过白名单（见 SqlSafeIdentifier）
+                    for (String column : SqlSafeIdentifier.splitAndCheck(v, "排序字段")) {
+                        queryWrapper.orderByAsc(column);
+                    }
                     break;
                 case "descs":
-                    queryWrapper.orderByDesc(StrUtil.toUnderlineCase(StrUtil.toString(v)));
+                    for (String column : SqlSafeIdentifier.splitAndCheck(v, "排序字段")) {
+                        queryWrapper.orderByDesc(column);
+                    }
                     break;
             }
         });
 
         //遍历进行字段查询条件组装
         colQueryMap.forEach((k, v) -> {
+            String column = SqlSafeIdentifier.check(StrUtil.toUnderlineCase(k), "查询字段");
             switch (k) {
                 case "pluginName":
                 case "datasourceName":
-                    queryWrapper.like(StrUtil.toUnderlineCase(k), v);
+                    queryWrapper.like(column, v);
                     break;
                 default:
-                    queryWrapper.eq(StrUtil.toUnderlineCase(k), v);
+                    queryWrapper.eq(column, v);
             }
         });
 
