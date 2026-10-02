@@ -6,7 +6,10 @@
 # 所以判定顺序是固定的三步，缺一不可：
 #   1) 日志里出现 "Not compiling test sources" —— 直接判失败；
 #   2) 抓不到 "Tests run: ... Failures: ... Errors:" 汇总行 —— 说明测试根本没跑起来，判失败；
-#   3) mvn 返回码非 0，或汇总行不是 Failures: 0, Errors: 0 —— 判失败。
+#   3) mvn 返回码非 0，或汇总行不是 "Tests run: <≥1>, Failures: 0, Errors: 0, Skipped: 0" —— 判失败。
+#      条数必须是正整数：测试类被改名/删除、或被 @Ignore 掉时，surefire 照样打
+#      "Tests run: 0, Failures: 0, Errors: 0"，mvn 也是 rc=0 —— 只看"0 失败"就会假绿，
+#      规则其实一条都没验。Skipped 必须为 0，跳过等于没跑。
 #
 # 用法（在仓库根目录）：
 #   . devops/checks/lib_mvn_test_gate.sh
@@ -48,8 +51,8 @@ run_test_gate() {
   fi
   echo "${summary}"
 
-  if [ "$rc" -ne 0 ] || ! echo "$summary" | grep -q "Failures: 0, Errors: 0"; then
-    echo "FAIL[${label}]: 回归未通过"
+  if [ "$rc" -ne 0 ] || ! echo "$summary" | grep -Eq "^Tests run: [1-9][0-9]*, Failures: 0, Errors: 0, Skipped: 0"; then
+    echo "FAIL[${label}]: 回归未通过。汇总行必须是「至少 1 条、0 失败、0 错误、0 跳过」，当前是：${summary}"
     grep -E "Tests run|FAIL|ERROR" "$log" | head -20
     rm -f "$log"
     return 1

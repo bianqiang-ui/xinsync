@@ -27,30 +27,34 @@ START_RE = re.compile(r"\berrThread\.start\s*\(\s*\)")
 GET_RE = re.compile(r"\bfutureTask\.get\s*\(")
 
 
-def is_code(stripped_line):
-    """整行注释不参与判定：注释里写到 futureTask.get() 不能把门禁带偏。"""
-    return not (stripped_line.startswith("//")
-                or stripped_line.startswith("*")
-                or stripped_line.startswith("/*"))
+def strip_comments(text):
+    """把注释整段剥掉，并且**保持行号不变**（用等量换行占位）。
+
+    上一版是按"这一行是否以 // 或 * 或 /* 开头"过滤，有两条假绿通道：
+      - 块注释的续行（有缩进、以中文或代码片段开头）被当成代码；
+      - 真代码删掉、但历史说明注释里恰好留着 errThread.start()，注释在前 → 顺序"满足"。
+    """
+    text = re.sub(r"/\*.*?\*/",
+                  lambda m: "\n" * m.group(0).count("\n"),
+                  text, flags=re.S)
+    return re.sub(r"//[^\n]*", "", text)
+
+
+def first_line(text, regex):
+    m = regex.search(text)
+    return None if m is None else text[:m.start()].count("\n") + 1
 
 
 def main():
     try:
         with PATH.open(encoding="utf-8") as f:
-            lines = f.read().splitlines()
+            code = strip_comments(f.read())
     except IOError as e:
         print("FAIL: 读不到 %s：%s" % (PATH, e))
         return 1
 
-    start_line = None
-    get_line = None
-    for lineno, s in enumerate(lines, 1):
-        if not is_code(s.strip()):
-            continue
-        if start_line is None and START_RE.search(s):
-            start_line = lineno
-        if get_line is None and GET_RE.search(s):
-            get_line = lineno
+    start_line = first_line(code, START_RE)
+    get_line = first_line(code, GET_RE)
 
     if start_line is None:
         print("FAIL: %s 里找不到 errThread.start()，stderr 读取线程被删了？" % PATH.name)
@@ -59,10 +63,10 @@ def main():
         print("FAIL: %s 里找不到 futureTask.get()，结构已变，本门禁需同步更新" % PATH.name)
         return 1
 
-    if start_line > get_line:
+    if start_line >= get_line:
         print("FAIL: 第 %d 行才启动 stderr 线程，却已在第 %d 行阻塞等 stdout 结果。" % (start_line, get_line))
         print("      子进程 stderr 写满管道缓冲（Linux 默认 64KB）后会卡在 write，")
-        print("      stdout 永不 EOF，父线程永久挂起 —— 这就是社区 #487。")
+        print("      stdout 永不 EOF，父线程互相等死 —— 这就是社区 #487。")
         return 1
 
     print("OK   stderr 线程(第 %d 行) 早于 futureTask.get()(第 %d 行) 启动" % (start_line, get_line))
