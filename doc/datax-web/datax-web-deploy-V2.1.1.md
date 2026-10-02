@@ -241,7 +241,7 @@ git clone https://github.com/WeiYe-Jing/datax-web.git
 没有安装git的话可以直接下载zip，并进行解压
 
 #### 7.2 数据库构建
-在datax-web文件夹中，找到 doc/db/datax_web.sql 文件，用navicat等软件连接mysql数据库后，新建datax_web数据库,然后执行数据库脚本。  
+在datax-web文件夹中，找到 bin/db/datax_web.sql 文件（老版本写的 `doc/db/datax_web.sql` 在当前仓库不存在，建库脚本已迁到 `bin/db/`），用navicat等软件连接mysql数据库后，新建datax_web数据库,然后执行数据库脚本。  
 **（注意不要执行其他sql脚本，并且执行完成后检查执行结，目前版本有12张表，部分表因mysql版本问题可能执行不成功，要找出来及时处理，本次使用mysql8.0。可以执行成功，使用mysql5.7版本，时间字段创建报错导致失败）**
 
 
@@ -259,9 +259,14 @@ datax-admin 修改文件位置  /datax-admin/src/main/resources/application.yml
     username: root
     password: your password
     url: jdbc:mysql://ip:port/datax_web?serverTimezone=Asia/Shanghai&useLegacyDatetimeCode=false&useSSL=false&nullNamePatternMatchesAll=true&useUnicode=true&characterEncoding=UTF-8
-    driver-class-name: com.mysql.jdbc.Driver
+    driver-class-name: com.mysql.cj.jdbc.Driver
 
 ```
+
+> 驱动类名以仓库现状为准：依赖已是 `mysql-connector-j` 8.0.33，出厂 `application.yml` 写的是
+> `com.mysql.cj.jdbc.Driver`。本文原来写的 `com.mysql.jdbc.Driver` 在 8.x 里只是兼容别名（会打 deprecation 警告），
+> 新项目照抄没有意义。另外当前版本的数据源四项已改成占位符（`${DB_HOST}` 等），
+> 打包部署时不必改 yml，直接用环境变量或 `bin/env.properties` 注入即可。
 
 datax-executor 修改文件位置  /datax-executor/src/main/resources/application.yml
 

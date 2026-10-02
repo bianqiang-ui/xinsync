@@ -78,7 +78,7 @@ flowchart TD
 
 | 键 | 出厂值 | 说明 |
 |:---|:---|:---|
-| `SERVER_PORT` | **9527** | admin 对外 Web/API 端口。**不是 8080**，`application.yml` 里 `#port: 8080` 只是注释示例 |
+| `SERVER_PORT` | **9527** | admin 对外 Web/API 端口。**不是 8080**：老文档里的 8080 是 xxl-job 的默认端口，本项目 `conf/application.yml` 写死 `server.port: 9527`（不能写成 `${server.port:9527}`，同名自引用会触发 Circular placeholder reference） |
 | `DATA_PATH` | `${BIN}/../data` | 日志、临时数据根目录 |
 | `MAIL_USERNAME` / `MAIL_PASSWORD` | 空 | 需要邮件告警才填 |
 
@@ -87,7 +87,7 @@ flowchart TD
 | 环境变量 | 对应配置 | 不设会怎样 |
 |:---|:---|:---|
 | `DB_HOST` / `DB_PORT` / `DB_DATABASE` / `DB_USERNAME` / `DB_PASSWORD` | `spring.datasource.*` | 走 yml 默认值（`127.0.0.1:3306`、库名 `dataxweb`，注意与真实库名 `datax_web` 不同） |
-| `DATAX_JWT_SECRET` | `security.jwt.secret` | 为空 → 登录 token 无法跨重启校验 |
+| `DATAX_JWT_SECRET` | `datax.jwt.secret` | 为空 → 登录 token 无法跨重启校验（启动时随机生成密钥，重启即全员掉线；多实例必须设成同一个值）。注意属性名是 `datax.jwt.secret` 而不是 `security.jwt.secret`，配错了不会报错、只会静默无效 |
 | `DATAX_AES_KEY` | `datasource.aes.key` | 用出厂 key → 启动打 ERROR，且**任何登录用户都能解出数据源口令** |
 | `DATAX_ACCESS_TOKEN` | `datax.job.accessToken` | 为空 → 执行器匿名回调被拒（默认安全侧） |
 
@@ -161,6 +161,9 @@ Tomcat started on port(s): 9504 (http) with context path ''
 | 启动方式 | `nohup java -jar datax-admin-2.1.1.jar --server.port=9999` | `bin/datax-admin.sh start`，默认端口 **9527** |
 | 端口来源 | `application.yml` | `bin/env.properties`（经 `-D` 覆盖 yml） |
 | JDBC 驱动 | `com.mysql.jdbc.Driver` | `com.mysql.cj.jdbc.Driver` |
+| 改应用日志位置 | "修改 application.yml 中的 logpath" | 改 `DATA_PATH`（`logging.path` 由它拼出）；`datax.job.executor.logpath` 是任务运行日志，两回事 |
 | 初始口令 | admin / 123456 | 一致，另加启动检测提醒改密 |
 
-`userGuid.md` 与 `datax-web-deploy.md` 里仍有 `com.mysql.jdbc.Driver`、8080 等旧口径，**未随本文一起改**（避免一次跨文档批量替换把别的段落改成与代码脱节的陈述）；等 TDSQL 批次统一重做部署文档时一并收口。
+`userGuid.md`、`datax-web-deploy.md` 与 `datax-web-deploy-V2.1.1.md` 里的 `com.mysql.jdbc.Driver`、8080、
+`doc/db/datax_web.sql` 等旧口径已逐文件核对现状后改正（改正依据是 `application.yml`、`pom.xml` 里
+`mysql-connector-j` 8.0.33 与 `bin/db/datax_web.sql` 的实际存在性），不再保留"本文正确、老文档待收口"的状态。
