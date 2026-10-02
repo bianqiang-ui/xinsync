@@ -11,6 +11,8 @@
 #      不能再静默返回 0 让任务"报成功、零字节"；只有空表的 NULL 才算合法的 0。
 #   4) AccessControlTest —— 权限模型：普通用户不得调 add/update/remove，不得用 updatePwd 改别人密码，
 #      也不得按 id 操作别人的资源（IDOR）。
+#   5) JobServiceBatchAddOwnerTest —— 批量建任务的归属必须落到调用者本人：写路径开始判归属之后，
+#      沿用模板 copyProperties 带出来的 user_id 会让"普通用户批量建的一整批任务自己改不了"。
 #
 # 判定标准与 TDSQL 门禁完全一致（同一个 lib）：测试没被编译/没跑起来，本身就判失败。
 set -u
@@ -18,7 +20,7 @@ set -u
 cd "$(dirname "$0")/../.." || exit 1
 . devops/checks/lib_mvn_test_gate.sh
 
-GATE_TESTS="JobDatasourceControllerUpdateTest,JobScheduleHelperMisfireLogTest,BaseQueryToolMaxIdTest,AccessControlTest"
+GATE_TESTS="JobDatasourceControllerUpdateTest,JobScheduleHelperMisfireLogTest,BaseQueryToolMaxIdTest,AccessControlTest,JobServiceBatchAddOwnerTest,SqlSafeIdentifierTest,BaseFormOrderByWhitelistTest"
 
 # 上游自带的测试类大多要连真库/真服务，在这个 fork 的门禁环境里跑不了。
 # 但"新写了一个 *Test 却没进任何名单"必须当场 FAIL —— 否则门禁名单会变成静默漏跑的黑名单，

@@ -57,6 +57,9 @@ RULES = [
     ("controller/JobInfoController.java", "remove", "owner"),
     ("controller/JobInfoController.java", "pause", "owner"),
     ("controller/JobInfoController.java", "start", "owner"),
+    # 手动触发走的是 JobTriggerPoolHelper 而不是 service，接线时最容易整个漏掉：
+    # 不判归属的话任何登录用户都能把别人的作业跑一遍，直接往别人的目标表写数。
+    ("controller/JobInfoController.java", "triggerJob", "owner"),
     ("controller/JobCodeController.java", "save", "owner"),
     ("controller/JobTemplateController.java", "update", "owner"),
     ("controller/JobTemplateController.java", "remove", "owner"),
