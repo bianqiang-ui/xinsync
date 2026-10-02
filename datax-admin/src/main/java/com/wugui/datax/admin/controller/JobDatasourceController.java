@@ -11,6 +11,7 @@ import io.swagger.annotations.Api;
 import io.swagger.annotations.ApiImplicitParam;
 import io.swagger.annotations.ApiImplicitParams;
 import io.swagger.annotations.ApiOperation;
+import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
@@ -52,7 +53,11 @@ public class JobDatasourceController extends BaseController {
     public R<IPage<JobDatasource>> selectAll() {
         BaseForm form = new BaseForm();
         QueryWrapper<JobDatasource> query = (QueryWrapper<JobDatasource>) form.pageQueryWrapperCustom(form.getParameters(), new QueryWrapper<JobDatasource>());
-        return success(jobJdbcDatasourceService.page(form.getPlusPagingQueryEntity(), query));
+        IPage<JobDatasource> page = jobJdbcDatasourceService.page(form.getPlusPagingQueryEntity(), query);
+        if (page != null && page.getRecords() != null) {
+            page.getRecords().forEach(JobDatasourceController::hideSecret);
+        }
+        return success(page);
     }
 
     /**
@@ -62,7 +67,11 @@ public class JobDatasourceController extends BaseController {
     @ApiOperation("获取所有数据源")
     @GetMapping("/all")
     public R<List<JobDatasource>> selectAllDatasource() {
-        return success(this.jobJdbcDatasourceService.selectAllDatasource());
+        List<JobDatasource> list = this.jobJdbcDatasourceService.selectAllDatasource();
+        if (list != null) {
+            list.forEach(JobDatasourceController::hideSecret);
+        }
+        return success(list);
     }
 
     /**
@@ -74,7 +83,46 @@ public class JobDatasourceController extends BaseController {
     @ApiOperation("通过主键查询单条数据")
     @GetMapping("{id}")
     public R<JobDatasource> selectOne(@PathVariable Serializable id) {
-        return success(this.jobJdbcDatasourceService.getById(id));
+        return success(hideSecret(this.jobJdbcDatasourceService.getById(id)));
+    }
+
+    /**
+     * 读出口回给前端的口令占位值。<b>固定 6 个星号</b>，与库里真实口令的长度、内容都无关。
+     *
+     * <h2>为什么不能直接回空</h2>
+     * 前端（打包产物 {@code static/static/js/chunk-60797987.*.js}）把 {@code jdbcPassword} 定成必填项
+     * （{@code jdbcPassword:[{required:!0,...}]}）。回空的话，管理员打开"编辑数据源"改任何一个别的字段，
+     * 点保存都会被表单卡在 "this is required"，请求根本发不出去 —— 那是把功能修坏，不是加固。
+     * 回固定掩码同时解决两件事：必填校验过得去、真实值一个字节都不出去，
+     * 而且"用户没动这一栏"变得可识别（回提值 == 掩码 ⇒ 不修改）。
+     *
+     * <h2>代价（写进升级说明）</h2>
+     * 真口令恰好是 {@code ******} 的数据源会被判成"未修改"——这种口令等于没设，换一个即可，不提供绕过开关。
+     */
+    private static final String PASSWORD_MASK = "******";
+
+    /**
+     * 读接口一律不回传数据源口令，只回 {@link #PASSWORD_MASK}。
+     *
+     * <h2>为什么"只是密文"也算泄漏</h2>
+     * {@code jdbc_password} 列上的 {@code AESEncryptHandler} 只作用在<b>写入</b>侧：
+     * MP 生成的 select 要用 {@code @TableName(autoResultMap = true)} 才会带上字段 typeHandler，
+     * 本实体没开，所以查出来的仍是库里的密文（这也是 {@code BaseQueryTool}/{@code JSONUtils} 自己调
+     * {@code AESUtil.decrypt} 的原因）。而 {@code datasource.aes.key} 有<b>出厂默认值并且写在仓库里</b>，
+     * 拿到密文与拿到明文没有区别 —— 只多了"读一次源码"这一步，而源码是公开的。
+     *
+     * <h2>为什么只能在 controller 剥、service 的 getById 必须继续带</h2>
+     * 下面的 {@code update()} 要用库里那条旧值认"旧前端原样回提的密文"；service 一起剥掉的话比较永远不成立。
+     *
+     * <h2>为什么不用"改管理员专属"来收口</h2>
+     * 普通用户建作业时要选数据源，这三个读接口必须对全体登录用户开放（见 docs/upgrade-notes.md 的 P6 待拍板项）。
+     * 所以收口点在字段上，不在入口上。
+     */
+    private static JobDatasource hideSecret(JobDatasource datasource) {
+        if (datasource != null) {
+            datasource.setJdbcPassword(PASSWORD_MASK);
+        }
+        return datasource;
     }
 
     /**
@@ -118,7 +166,16 @@ public class JobDatasourceController extends BaseController {
         if (null != d.getJdbcUsername() && d.getJdbcUsername().equals(entity.getJdbcUsername())) {
             entity.setJdbcUsername(null);
         }
-        if (null != entity.getJdbcPassword() && entity.getJdbcPassword().equals(d.getJdbcPassword())) {
+        // 这三种提交都解释成"这次不改口令"，而不是"把口令清空"：
+        //   1) 掩码 —— 读接口回给前端的占位值，用户没动这一栏时回提的就是它；
+        //   2) 空白 —— 非浏览器调用方（脚本、老前端）不带这一栏；
+        //   3) 与库里那条完全相同 —— 历史行为，旧前端会回原样（改动前是密文）。
+        // 若照原样更新，一次"只改数据源名称"的编辑就会把这个源的连接口令抹掉，
+        // 而失败要到下一次作业触发连库时才暴露——离编辑动作十万八千里，没人会想到是这儿。
+        // 代价：编辑界面无法把口令"清空"（无口令的源新建时就留空；要换口令就提交新值）。
+        if (StringUtils.isBlank(entity.getJdbcPassword())
+                || PASSWORD_MASK.equals(entity.getJdbcPassword())
+                || entity.getJdbcPassword().equals(d.getJdbcPassword())) {
             entity.setJdbcPassword(null);
         }
         return success(this.jobJdbcDatasourceService.updateById(entity));

@@ -31,6 +31,9 @@
 #      而 datax.py 收尾是 Popen(shell=True)），且那段"空白退回 Timestamp"的归一化排在
 #      BeanUtils.copyProperties 之后（改的是源对象，落库的行没动）；判定还必须跟着 incrementType，
 #      否则主键增量的存量任务会被 partition_info 的残留值锁死。
+#  11) JobDatasourceSecretScrubTest —— 数据源只读接口不得把 jdbc_password 带进响应体
+#      （库里是 AES 密文，而 datasource.aes.key 有出厂默认值且写在本仓库里，密文≈明文），
+#      同时钉住反向红线：回提空口令必须解释成"本次不改"而不是"清空"，且普通用户浏览数据源的能力不得被砍。
 #
 # 判定标准与 TDSQL 门禁完全一致（同一个 lib）：测试没被编译/没跑起来，本身就判失败。
 set -u
@@ -38,7 +41,7 @@ set -u
 cd "$(dirname "$0")/../.." || exit 1
 . devops/checks/lib_mvn_test_gate.sh
 
-GATE_TESTS="JobDatasourceControllerUpdateTest,JobScheduleHelperMisfireLogTest,BaseQueryToolMaxIdTest,AccessControlTest,JobServiceBatchAddOwnerTest,SqlSafeIdentifierTest,BaseFormOrderByWhitelistTest,JobLogControllerOwnershipTest,JwtAuthFailurePathTest,OwnerStampNullSafeTest,JobServiceUpdateParamTest"
+GATE_TESTS="JobDatasourceControllerUpdateTest,JobScheduleHelperMisfireLogTest,BaseQueryToolMaxIdTest,AccessControlTest,JobServiceBatchAddOwnerTest,SqlSafeIdentifierTest,BaseFormOrderByWhitelistTest,JobLogControllerOwnershipTest,JwtAuthFailurePathTest,OwnerStampNullSafeTest,JobServiceUpdateParamTest,JobDatasourceSecretScrubTest"
 
 # 上游自带的测试类大多要连真库/真服务，在这个 fork 的门禁环境里跑不了。
 # 但"新写了一个 *Test 却没进任何名单"必须当场 FAIL —— 否则门禁名单会变成静默漏跑的黑名单，
