@@ -38,6 +38,13 @@ datax:
     # python 解释器，Windows 一般保持 python，Linux 可改为 python3 或绝对路径
     # 启动脚本里的 PYTHON_BIN / -Ddatax.executor.python 优先级高于此处
     python: python
+    # 启动清理：jobTmp-*.conf 内含解密后的数据源明文口令，正常走完任务会在 finally 删掉，
+    # 但 kill -9 / OOM / 断电时删不到，文件就一直留在磁盘上，所以执行器启动时补删一次
+    tmpclean:
+      # false = 一个都不删（同机多实例共享同一个 jsonpath、又不想让启动清理碰别人文件时用）
+      enabled: true
+      # 只删早于该时长（分钟）的残留：阈值太小会把同机另一个实例正在跑的长任务的临时文件删掉
+      staleMinutes: 1440
 
   #pypath: F:\tools\datax\bin\datax.py
   pypath: ${python.path:}

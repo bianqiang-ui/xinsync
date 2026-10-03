@@ -28,7 +28,7 @@
 - **S8 XSS / JSON 构建** — `DataxJsonController.buildJobJson` 增加 `AccessControl.adminDeny()` 守卫
 - **S9 口令泄漏 - API 响应** — `JobDatasourceController` 所有读接口返回 `PASSWORD_MASK = "******"`
 - **S10 口令泄漏 - 日志** — `JobTrigger.sanitizeTriggerMsg()` 正则脱敏 password/accessToken
-- **S11 口令泄漏 - 临时文件** — `ExecutorJobHandler` 临时 JSON 文件设置 0600 权限 + `cleanStaleTmpFiles()`
+- **S11 口令泄漏 - 临时文件** — `ExecutorJobHandler` 的 `jobTmp-*.conf` 改为**创建即 0600**（`PrivateTmpFiles`，权限作为创建属性一次给出，不再有"先建后 chmod"的全局可读窗口），并让 `cleanStaleTmpFiles()` **真的被调用**（执行器 `@PostConstruct` 启动清理，带 `staleMinutes` 阈值与 `enabled` 逃生口；此前该方法存在但零调用点）
 - **S12 JWT 硬编码密钥** — JWT secret 改为环境变量 `${JWT_SECRET}` 注入
 
 #### MEDIUM（2 项 — 全部修复）
