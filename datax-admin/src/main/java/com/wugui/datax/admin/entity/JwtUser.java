@@ -76,10 +76,15 @@ public class JwtUser implements UserDetails {
 
     @Override
     public String toString() {
+        // Spring Security 的 AbstractAuthenticationToken.toString() 会把 principal 原样拼进去
+        // （"Principal: " + principal），而 DaoAuthenticationProvider / 各类 filter 在 DEBUG 下就会打这条。
+        // Spring 自己的 UserDetails 实现（org...userdetails.User）刻意不打 credentials，本类照同一口径：
+        // 整段不出现，连长度也不给 —— 这一栏是登录凭据（历史行还可能是明文），不是 RPC 令牌那种
+        // "给个长度好排查"的场景。
         return "JwtUser{" +
                 "id=" + id +
                 ", username='" + username + '\'' +
-                ", password='" + password + '\'' +
+                ", password='[PROTECTED]'" +
                 ", authorities=" + authorities +
                 '}';
     }

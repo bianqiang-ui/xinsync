@@ -1,5 +1,7 @@
 package com.wugui.datatx.core.biz.model;
 
+import com.wugui.datax.rpc.util.SensitiveLogMask;
+
 import java.io.Serializable;
 import java.util.Date;
 
@@ -239,11 +241,15 @@ public class TriggerParam implements Serializable{
                 ", logId=" + logId +
                 ", logDateTime=" + logDateTime +
                 ", glueType='" + glueType + '\'' +
-                ", glueSource='" + glueSource + '\'' +
+                //  这两个字段是「整段内容本身就是敏感物」的那一类：glueSource 是用户写的脚本，
+                //  jobJson 是 JobTrigger 派发那一刻刚还原出来的**明文数据源账密**。原先它们被 toString
+                //  原样带出，而 toString 的下游不止一条出口（RPC 超时异常消息、invoke error 日志、
+                //  以及那些消息再拼进 job_log.trigger_msg 落库）。收口只能收在这儿，打印处逐个遮是追不上的。
+                ", glueSource=" + SensitiveLogMask.describeBlob(glueSource) +
                 ", glueUpdatetime=" + glueUpdatetime +
                 ", broadcastIndex=" + broadcastIndex +
                 ", broadcastTotal=" + broadcastTotal +
-                ", jobJson=" + jobJson +
+                ", jobJson=" + SensitiveLogMask.describeBlob(jobJson) +
                 ", processId=" + processId +
                 ", replaceParam=" + replaceParam +
                 ", jvmParam=" + jvmParam +

@@ -7,6 +7,7 @@ import com.wugui.datax.admin.core.handler.AESEncryptHandler;
 import io.swagger.annotations.ApiModel;
 import io.swagger.annotations.ApiModelProperty;
 import lombok.Data;
+import lombok.ToString;
 
 import java.io.Serializable;
 import java.util.Date;
@@ -20,6 +21,10 @@ import java.util.Date;
  */
 
 @Data
+// jdbcPassword 这一栏在内存里是**解密后的明文**（AESEncryptHandler 只在读写库时加解密），
+// 而 @Data 会把它一起生成进 toString() —— 批次 10-G 收的是响应体，日志侧这条出口同属
+// "凭据不出 toString"这一条口径。jdbcUsername 保留：日志页要能说出连的是哪个账号。
+@ToString(exclude = "jdbcPassword")
 @ApiModel
 @TableName("job_jdbc_datasource")
 public class JobDatasource extends Model<JobDatasource> {

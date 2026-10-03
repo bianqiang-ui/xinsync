@@ -19,7 +19,7 @@ import com.wugui.datax.admin.tool.query.BaseQueryTool;
 import com.wugui.datax.admin.tool.query.QueryToolFactory;
 import com.wugui.datax.admin.util.JSONUtils;
 import com.wugui.datax.rpc.util.IpUtil;
-import com.wugui.datax.rpc.util.ThrowableUtil;
+import com.wugui.datax.rpc.util.SensitiveLogMask;
 import org.apache.commons.lang.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -310,23 +310,16 @@ public class JobTrigger {
     /**
      * 从 trigger_msg 里擦除可能包含的口令。
      *
-     * jobJson 里的 "username":"xxx", "password":"xxx" 与 accessToken 值是最常见的泄漏位置：
-     * RPC 超时时异常信息可能把完整的 TriggerParam.toString() 带出来。
-     * 这里用正则替换而不是完全丢弃，保留故障定位所需的上下文。
+     * 这是**第二层**，不是主防线：主防线是 {@code TriggerParam.toString()} / {@code XxlRpcRequest.toString()}
+     * 根本不产出凭据（都走 {@link SensitiveLogMask}）。这一层留给两种存量形态：
+     * 老执行器（升级前的 jar）回传的异常文本，以及别的模块自己拼出来的消息串。
+     *
+     * 原先这里自己抄了一份正则，只匹配未转义的 {@code "password":"..."} —— 而异常消息里 jobJson 常常是被
+     * 当作字符串嵌进去的，引号带反斜杠（{@code \"password\":\"...\"}），那条规则一条都命中不了；
+     * URL 形态那一条还漏了 {@code username}。现在判定与遮蔽都从同一份实现走，两种形态一起判。
      */
     private static String sanitizeTriggerMsg(String msg) {
-        if (msg == null) {
-            return null;
-        }
-        // "password":"xxx" / "username":"xxx" / "accessToken":"xxx" → "password":"******"
-        String sanitized = msg.replaceAll(
-                "\"(password|username|accessToken)\"\\s*:\\s*\"[^\"]*\"",
-                "\"$1\":\"******\"");
-        // password=xxx&  或  password=xxx 在 URL 风格参数里
-        sanitized = sanitized.replaceAll(
-                "(password|accessToken)=([^&\\s\"']+)",
-                "$1=******");
-        return sanitized;
+        return SensitiveLogMask.maskSecretValues(msg);
     }
 
 }

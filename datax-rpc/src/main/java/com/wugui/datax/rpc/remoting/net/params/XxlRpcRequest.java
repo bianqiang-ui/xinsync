@@ -1,5 +1,7 @@
 package com.wugui.datax.rpc.remoting.net.params;
 
+import com.wugui.datax.rpc.util.SensitiveLogMask;
+
 import java.io.Serializable;
 import java.util.Arrays;
 
@@ -92,11 +94,14 @@ public class XxlRpcRequest implements Serializable {
 		return "XxlRpcRequest{" +
 				"requestId='" + requestId + '\'' +
 				", createMillisTime=" + createMillisTime +
-				", accessToken='" + accessToken + '\'' +
+				", accessToken='" + SensitiveLogMask.describeSecret(accessToken) + '\'' +
 				", className='" + className + '\'' +
 				", methodName='" + methodName + '\'' +
 				", parameterTypes=" + Arrays.toString(parameterTypes) +
-				", parameters=" + Arrays.toString(parameters) +
+				//  parameters 里跑的是 ExecutorBiz 的入参：run() 带 TriggerParam（jobJson 已在它自己那层遮掉），
+				//  log() 带执行器回传的 handleMsg —— 那是 DataX 子进程的报错原文，里头可能自带
+				//  "Access denied for user ..." 这类凭据片段，所以这一层再扫一遍值。
+				", parameters=" + SensitiveLogMask.maskSecretValues(Arrays.toString(parameters)) +
 				", version='" + version + '\'' +
 				'}';
 	}
