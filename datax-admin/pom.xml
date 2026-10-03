@@ -62,6 +62,22 @@
                 <version>${logback-classic.version}</version>
             </dependency>
 
+            <!--
+                netty-bom 必须排在 Boot 的 BOM **前面**。同一个 pom 的 dependencyManagement
+                按声明顺序取先者：spring-boot-starter-parent 2.1.18 把 io.netty 的每个模块
+                钉在 4.1.53.Final，排在它后面就还是 4.1.53 —— 第十九轮实测过只升 netty-all 的后果：
+                包里 netty-all 是 4.1.100、netty-buffer/codec/common/transport… 一堆模块是 4.1.53，
+                同一批类有两份不同版本（NoSuchMethodError 的温床）。
+                上面 logback 那两条能生效，靠的正是"显式条目排在 BOM import 前面"同一个机制。
+            -->
+            <dependency>
+                <groupId>io.netty</groupId>
+                <artifactId>netty-bom</artifactId>
+                <version>${netty.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+
             <dependency>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-starter-parent</artifactId>

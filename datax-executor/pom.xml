@@ -16,6 +16,20 @@
 
     <dependencyManagement>
         <dependencies>
+            <!--
+                netty-bom 必须排在 Boot 的 BOM 前面：同一个 pom 的 dependencyManagement
+                按声明顺序取先者，spring-boot-starter-parent 2.1.18 把 io.netty 的每个模块
+                钉在 4.1.53.Final，排在它后面就还是 4.1.53。只升 netty-all 会让产出的包里
+                netty 家族两个版本并存（第十九轮实测），故 netty-bom 在前、Boot BOM 在后。
+                上面 logback 的显式条目能生效，靠的是同一个机制。
+            -->
+            <dependency>
+                <groupId>io.netty</groupId>
+                <artifactId>netty-bom</artifactId>
+                <version>${netty.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
             <dependency>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-starter-parent</artifactId>

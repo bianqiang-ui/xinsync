@@ -18,10 +18,22 @@ except ImportError:
     sys.exit(1)
 
 
+# 不扫的目录：tmp/ 放一次性脚本与整树沙箱（falsify_*.py 会复制出 shadow/doccmd_sandbox），
+# docs/kettle/ 是外部第三方教程仓库的浅克隆。扫它们会让"查了几份"随我的临时目录数量浮动，
+# 还会替别人的配置背 PASS —— 第十八轮的 recheck 实测到 12 份里 9 份是沙箱副本。
+SKIP_DIRS = ("target", ".git", "node_modules", "tmp", "build", "packages", "kettle")
+
+# 必须扫到的出厂配置：一条都不能少。少了说明扫描根给错了或目录被挪了，
+# 这时哪怕剩下的 yml 全都解析通过，也代表"本项目的配置一条没查"，不能报绿。
+REQUIRED_YAML = [
+    ".github/FUNDING.yml",
+    "datax-admin/src/main/resources/application.yml",
+    "datax-executor/src/main/resources/application.yml",
+]
+
+
 class DuplicateKeyLoader(yaml.SafeLoader):
     pass
-
-
 def _construct_mapping(loader, node, deep=False):
     seen = {}
     for key_node, _ in node.value:
@@ -45,10 +57,22 @@ def main():
     root = sys.argv[1] if len(sys.argv) > 1 else default_root
     targets = []
     for dirpath, dirnames, filenames in os.walk(root):
-        dirnames[:] = [d for d in dirnames if d not in ("target", ".git", "node_modules")]
+        # tmp/ 是本仓库放一次性脚本与整树沙箱的地方（falsify_*.py 会复制出 shadow/doccmd_sandbox），
+        # docs/kettle/ 是外部第三方教程仓库的浅克隆 —— 这两处的 yml 不是本项目的配置口径，
+        # 扫它们会让"查了几份"随我的临时目录数量浮动，还会替别人的配置背 PASS。
+        dirnames[:] = [d for d in dirnames if d not in SKIP_DIRS]
         for name in filenames:
             if name.endswith((".yml", ".yaml")):
                 targets.append(os.path.join(dirpath, name))
+
+    # 反证用的"必须扫到"清单：扫描根走空/被挪位时，targets 可能只剩第三方仓库里的一份 yml，
+    # 那照样是"0 份本项目配置被检查"，不能报绿。
+    rel_targets = set(os.path.relpath(p, root).replace(os.sep, "/") for p in targets)
+    missing_required = [p for p in REQUIRED_YAML if p not in rel_targets]
+    if missing_required:
+        print("FAIL 扫描根 %s 里没找到本项目的出厂配置：%s —— 是目录被挪了还是扫描根给错了？"
+              % (root, "、".join(missing_required)))
+        return 1
 
     failed = 0
     for path in sorted(targets):

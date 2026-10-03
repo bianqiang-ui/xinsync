@@ -19,6 +19,15 @@
         <!-- ********************** net + serialize + registry (default = netty + hessian + xxl-registry) ********************** -->
 
         <!-- netty -->
+        <!--
+            不要在这里给 netty-all 加 <exclusions> 把 io.netty 的单模块挡掉：
+            netty-all 从 4.1.7x 起是**空聚合 jar**（实测 netty-all-4.1.100.Final.jar 里 0 个 .class，
+            类全在 netty-buffer/codec/common/transport… 单模块里），挡掉单模块等于挡掉全部类，
+            datax-rpc 会直接编译失败：package io.netty.buffer does not exist（第十九轮实测）。
+            正确做法在本模块之外：根 pom 的 dependencyManagement 有 io.netty:netty-all 条目，
+            datax-admin / datax-executor 把 netty-bom 排在 spring-boot-starter-parent 之前，
+            让家族所有模块统一到 ${netty.version}；由第 14 道门禁读产出的 tar 逐模块验版本。
+        -->
         <dependency>
             <groupId>io.netty</groupId>
             <artifactId>netty-all</artifactId>

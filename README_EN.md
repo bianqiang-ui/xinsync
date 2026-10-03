@@ -20,13 +20,13 @@ The upstream project stopped being maintained in June 2024 with 180+ open issues
 >
 > This is **not a simple bug fix** — it's a **comprehensive, systematic security transformation**:
 >
-> - 📊 **45 commits** touching **134 files**, adding **13,976 lines** of code against the upstream baseline
->   `upstream-baseline` (measured on 2026-10-03 at the close of round 18; reproduce with
->   `git diff --shortstat upstream-baseline..HEAD`; the numbers move with every batch)
+> - 📊 **46 commits** touching **135 files**, adding **14,800 lines** of code against the upstream baseline
+>   `upstream-baseline` (measured on 2026-10-03 at the close of round 18, excluding the commit that carries
+>   these numbers; reproduce with `git diff --shortstat upstream-baseline..HEAD` — the numbers move with every batch)
 > - 🔒 Fixed **15 security vulnerabilities** (5 of them CRITICAL) — RPC deserialization RCE, IDOR, command injection, Log4Shell, GLUE script RCE
 > - 🛡️ **33 authorization seams** verified one by one by a gate script (single `AccessControl` implementation, ownership always read back from the DB row)
 > - ✅ Long-standing community issues closed: #487 orphan process tree, #296 Hive connection, #389 scheduler stalls, #265 HBase datasource, and more
-> - 🏗️ **13 automated security gates** — one command to re-run everything, zero silent regression
+> - 🏗️ **14 automated security gates** — one command to re-run everything, zero silent regression
 > - 📝 **2,024 lines of development log** plus a technical manual and upgrade notes, every claim backed by measured evidence
 
 ## Architecture
@@ -93,7 +93,7 @@ graph TB
 | **Credential Protection** | API returns credential material | Full chain: API mask / job_json stores references only / logs and RPC exits masked / temp files created 0600 |
 | **Dependency Safety** | Log4j2 2.11.2, Logback 1.2.3, … | Log4j2 2.17.2 / Logback 1.2.13 / Fastjson 1.2.83 / Netty 4.1.100.Final locked in the root POM |
 | **Domestic DB Support** | None | TDSQL datasource seam + DDL rewriting (shardkey / primary key / indexes) |
-| **Quality Gates** | None | 13 automated security gates, reproducible verification |
+| **Quality Gates** | None | 14 automated security gates, reproducible verification |
 
 ---
 
@@ -128,7 +128,7 @@ graph TB
 
 ### 🛡️ Automated Security Gate System
 
-**13 automated security gates** ship inside the repository, so any change — including a fresh clone — can be re-verified with one command:
+**14 automated security gates** ship inside the repository, so any change — including a fresh clone — can be re-verified with one command:
 
 ```bash
 bash devops/fork-workflow.sh recheck
@@ -145,6 +145,7 @@ bash devops/fork-workflow.sh recheck
 | `devops/checks/check_datasource_secret_scrub.py` | Datasource passwords never leave: read APIs mask, job_json carries references |
 | `devops/checks/check_log_secret_mask.sh` | Credentials masked at every toString/log exit; `SensitiveLogMask` is the only implementation |
 | `devops/checks/check_executor_tmpfile.sh` | Executor temp files created 0600; startup cleanup has hook, threshold and escape hatch |
+| `devops/checks/check_package_deps.sh` | Reads the **built deployment packages** and pins the shipped jar versions against the root pom (netty family, log4j2, logback; EOL leftovers reconciled against a per-package ledger) |
 | `devops/checks/check_doc_secrets.py` | No copy-pasteable secret literals or maintainer-local paths in public docs |
 | `devops/checks/check_doc_commands.py` | Every copy-pasteable command in the docs points at a path that exists in this repo |
 | `devops/checks/check_admin_tests.sh` | Admin regression tests really run (rejects `Tests run: 0` fake green) |

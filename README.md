@@ -18,12 +18,12 @@
 
 > 不是简单的 Bug 修复，而是把原版"能跑起来就行"的代码base 重做了一遍安全与可维护性收口：
 >
-> - 📊 **45 次提交**，涉及 **134 个文件**，新增 **13,976 行代码**（对比上游基线 `upstream-baseline`，
->   2026-10-03 第十八轮收口时实测，可用 `git diff --shortstat upstream-baseline..HEAD` 复现；数字随批次前移）
+> - 📊 **46 次提交**，涉及 **135 个文件**，新增 **14,800 行代码**（对比上游基线 `upstream-baseline`，
+>   2026-10-03 第十八轮收口时实测，不含携带该数字的提交本身；可用 `git diff --shortstat upstream-baseline..HEAD` 复现，数字随批次前移）
 > - 🔒 修复 **15 项安全漏洞**（含 5 项 CRITICAL）：RPC 反序列化 RCE、越权（IDOR）、命令注入、Log4Shell、GLUE 脚本 RCE 等
 > - 🛡️ **33 条授权接缝** 逐条闭环判定（`AccessControl` 单点实现），从"只有登录判定"到"角色 + 归属双层"
 > - ✅ 收口 **社区长期悬而未决的 Issue**：#487 进程树残留、#296 Hive 连接、#389 定时任务不触发、#265 HBase 数据源等
-> - 🏗️ 内置 **13 道自动化质量门禁**，任何改动都能一键复跑验证（见下文"质量门禁"）
+> - 🏗️ 内置 **14 道自动化质量门禁**，任何改动都能一键复跑验证（见下文"质量门禁"）
 > - 📝 **2,024 行开发日志** + 技术手册 + 升级说明，每批改动都带实测证据与反证记录
 >
 > **原版是一把好刀，我们给它淬了火、开了刃、配了鞘。**
@@ -38,7 +38,7 @@
 | **口令保护** | API 返回明文/密文口令 | 全链路脱敏：API 掩码 / job_json 只写引用 / 日志与 RPC 出口遮蔽 / 临时文件创建即 0600 |
 | **依赖安全** | Log4j2 2.11.2、Logback 1.2.3 等 | Log4j2 2.17.2 / Logback 1.2.13 / Fastjson 1.2.83 / Netty 4.1.100.Final 全局锁定 |
 | **信创适配** | 无 | TDSQL 数据源接缝 + DDL 自动改写（分片键/主键/索引） |
-| **质量门禁** | 无 | 13 道可复跑门禁 + 全仓库 shell 语法检查 |
+| **质量门禁** | 无 | 14 道可复跑门禁 + 全仓库 shell 语法检查 |
 
 ---
 
@@ -132,7 +132,7 @@ graph TB
 
 ### 🛡️ 质量门禁系统
 
-项目内置 **13 道自动化质量门禁**，全部随仓库交付，任何改动都能一键复跑：
+项目内置 **14 道自动化质量门禁**，全部随仓库交付，任何改动都能一键复跑：
 
 ```bash
 bash devops/fork-workflow.sh recheck
@@ -149,6 +149,7 @@ bash devops/fork-workflow.sh recheck
 | `devops/checks/check_datasource_secret_scrub.py` | 数据源口令"只进不出"：读接口回掩码、向导产物不含口令 |
 | `devops/checks/check_log_secret_mask.sh` | 凭据出口遮蔽：四个出口 + `SensitiveLogMask` 唯一实现处 + 单测真跑 |
 | `devops/checks/check_executor_tmpfile.sh` | 执行器临时文件创建即 0600、启动清理有钩子有阈值有逃生口 |
+| `devops/checks/check_package_deps.sh` | 读**产出的部署包**核对依赖版本（netty/log4j2/logback 与根 pom 的 pin 一致，EOL 残留按台账逐条对上） |
 | `devops/checks/check_doc_secrets.py` | 对外文档不得出现可照抄的密钥字面值与维护者本机路径 |
 | `devops/checks/check_doc_commands.py` | 对外文档里每条可照抄命令都指向仓库内真实存在的路径 |
 | `devops/checks/check_admin_tests.sh` | 管理端回归单测真跑（拒绝 `Tests run: 0` 式假绿） |

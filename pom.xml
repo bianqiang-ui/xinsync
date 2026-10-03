@@ -105,6 +105,19 @@
                 <artifactId>log4j-to-slf4j</artifactId>
                 <version>${log4j2.version}</version>
             </dependency>
+            <!--
+                netty 必须走 dependencyManagement，光有 <properties> 里的 netty.version 不管用：
+                那个 property 只被 datax-rpc/pom.xml 的**直接声明**引用（netty-all ${netty.version}），
+                而从 datax-executor / datax-admin 的视角看 netty-all 是**传递依赖**，
+                这两个模块各自 import 了 spring-boot-starter-parent:2.1.18.RELEASE 当 BOM，
+                Boot 管理的 4.1.53.Final 就把我们的版本压掉了 —— 实测产出的两个部署包里
+                一直是 netty-all-4.1.53.Final.jar。property 管传递依赖，只有 dM 条目管。
+            -->
+            <dependency>
+                <groupId>io.netty</groupId>
+                <artifactId>netty-all</artifactId>
+                <version>${netty.version}</version>
+            </dependency>
         </dependencies>
     </dependencyManagement>
 

@@ -44,6 +44,16 @@ README 里"9 个自动化安全检查""9 道门禁"这类声明就是靠人记�
 修法是把脚本搬进 `devops/fork-workflow.sh`，文档改指它；门禁两侧都钉：
 旧写法命中即 FAIL，同时要求现状文档里**至少有一处**写了对内入口 ——
 只删旧的不写新的，读者照样复跑不了。
+
+第 7 条：markdown 表格行必须在**同一行**闭合（行首是 `|` ⇒ 去掉空白后行尾也必须是 `|`）。
+实测教训（第十八轮 #40，就在写这一轮文档的时候发生的）：给技术手册 §7 那张三列表补
+"不含携带该数字的提交本身"这半句时，一次编辑把内容敲成了两个物理行 ——
+第一行 `…+14,800 / −654**，` 结尾没有 `|`，第二行从"口径为 …"裸起。GFM 里第二行**不再是表格的一部分**，
+整行的单元格随之错位；而 git 不报错、其余门禁全绿、diff 里人眼看不出（正因为它是"合法散文"）。
+所以这条只能机器钉。
+范围与命令扫描**不同**：命令扫描不动 `docs/devlog.md`，因为那里的数字是"当时实测"的历史事实；
+表格语法不是事实而是**装订**，把断行接回去不改变任何一句陈述的内容，所以台账一起查。
+围栏内的行一律跳过 —— 文档里的 mermaid 边标签、ASCII 样例都有以 `|` 开头的行，那是图不是表。
 """
 import io
 import re
@@ -305,6 +315,36 @@ ENTRY_PATTERNS = ("README*.md", "doc/XinSync-*.md", "docs/technical-manual.md",
 # 随 clone 交付不了。入口已搬进仓库（devops/fork-workflow.sh），旧写法不得残留。
 STALE_ENTRY_RE = re.compile(r"(?:bash|sh|source)\s+tools/fork-workflow\.sh")
 
+# 第 7 条（表格行闭合）的扫描范围：所有会被渲染成交付物的 markdown。
+# 与 HOWTO/CLAIM 两组的取舍不同，这里**包含** docs/devlog.md 与 CHANGELOG.md ——
+# 查的是装订不是事实，接回断行不改变任何一句陈述的内容。
+TABLE_DOC_PATTERNS = ("README*.md", "CHANGELOG.md", "doc/*.md", "doc/**/*.md", "docs/*.md")
+# 行首的表格标记：允许前导空白（缩进表格在 GFM 里同样是表）
+TABLE_ROW_RE = re.compile(r"^\s*\|")
+
+
+def fenced_lineno_set(text):
+    """任意 ``` / ~~~ 围栏**内部**（含围栏行本身）的行号集合。
+
+    与 `fenced_lines` 的区别：那个按语言标筛过、只服务于命令扫描；这里要的是"全部代码样例"，
+    因为 mermaid / ASCII 图里的 `|` 行不是表格，判它们断行就是误报。
+    闭合判定与 `fenced_lines` 保持同一口径（同种标记、行首即闭合）。
+    """
+    out = set()
+    marker = None
+    for no, line in enumerate(text.split("\n"), start=1):
+        m = FENCE_RE.match(line)
+        if m:
+            if marker is None:
+                marker = m.group(1)
+            elif line.strip().startswith(marker):
+                marker = None
+            out.add(no)
+            continue
+        if marker is not None:
+            out.add(no)
+    return out
+
 
 def main():
     howto = sorted({p for pat in HOWTO_PATTERNS for p in ROOT.glob(pat) if p.is_file()})
@@ -441,6 +481,43 @@ def main():
         fail("现状文档里一处都没提 `devops/fork-workflow.sh` —— 门禁入口没对外交付，"
              "读者无从复跑防线")
 
+    # 第 7 条：表格行必须同一行闭合
+    # 过滤条件必须建立在**相对**路径上。实测教训（第一遍就在反证沙箱里翻车）：
+    # 上一版写的是 `"tmp" not in p.parts`，而 `p.parts` 含绝对路径前缀 ——
+    # 沙箱本身位于 `<repo>/tmp/doccmd_sandbox/` 下，于是**整个沙箱树被当成草稿排除**，
+    # 报"一个 markdown 都没匹配到"。真实树恰好不在 tmp 下，所以本地跑是绿的：
+    # 典型的"门禁在工作副本里对、在交付/复现环境里瞎"。
+    table_files = set()
+    for pat in TABLE_DOC_PATTERNS:
+        for p in ROOT.glob(pat):
+            if not p.is_file():
+                continue
+            rel_parts = p.relative_to(ROOT).parts
+            if "target" in rel_parts or "tmp" in rel_parts:
+                continue
+            table_files.add(p)
+    table_files = sorted(table_files)
+    if not table_files:
+        fail("TABLE_DOC_PATTERNS 一个 markdown 都没匹配到 —— 表格闭合检查失效（glob 静默失配的老毛病）")
+    table_rows = 0
+    for path in table_files:
+        rel = path.relative_to(ROOT).as_posix()
+        text = read(path)
+        skip = fenced_lineno_set(text)
+        for lineno, line in enumerate(text.split("\n"), start=1):
+            if lineno in skip or not TABLE_ROW_RE.match(line):
+                continue
+            if line.rstrip().endswith("|"):
+                table_rows += 1
+                continue
+            # 只记 1 条：把 offending 内容并进同一条 FAIL，否则"违规处数"会被成倍虚高，
+            # 而对外声明用的是处数。
+            fail("%s:%d 表格行没有在同一行闭合（行尾缺 `|`）—— 这一行的单元格在渲染时全部错位，"
+                 "下一物理行会被当成散文丢掉。 offending 行：`%s`"
+                 % (rel, lineno, line.strip()[:120]))
+    if table_rows == 0:
+        fail("交付文档里一个闭合的表格行都没找到 —— 表格检查没有实际生效（要么表全被删了，要么判据写坏了）")
+
     sys.stdout.write("扫描照做类文档 %d 份（围栏内命令行 %d 行），实际门禁 %d 个\n"
                      % (len(howto), blocks_total, actual))
     for note in notes[:5]:
@@ -453,12 +530,15 @@ def main():
     if failures:
         for f in failures:
             sys.stdout.write("FAIL %s\n" % f)
-        sys.stdout.write("FAIL: 文档里的可照抄命令有 %d 处照做必失败（详见上面 FAIL 行）\n" % len(failures))
+        sys.stdout.write("FAIL: 对外文档有 %d 处不合格（照做必失败的路径/命令，或损坏的表格行）\n"
+                         % len(failures))
         return 1
     sys.stdout.write("PASS: 照做类文档 %d 份、%d 行命令行全部指向仓库里真实存在的路径；"
-                     "门禁条数三方一致（实际 %d / MIN_GATES %s / 文档声明与表格 %s）\n"
+                     "门禁条数三方一致（实际 %d / MIN_GATES %s / 文档声明与表格 %s）；"
+                     "交付文档 %d 份、%d 个表格行全部在同一行闭合\n"
                      % (len(howto), blocks_total, actual, declared_min,
-                        "一致" if not any(c[2] not in (None, actual) for c in claims) else "见上"))
+                        "一致" if not any(c[2] not in (None, actual) for c in claims) else "见上",
+                        len(table_files), table_rows))
     return 0
 
 
