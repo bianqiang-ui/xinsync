@@ -17,6 +17,13 @@
 （`AccessControl.requireAdmin();` 但不 return 拒绝体），子串存在型检查对这种完全无感。
 所以本门禁判的是"赋值 → 非空即返回"这条闭环，不是字符串出没出现过。
 
+第三类缺口是这一轮补的：**接了、口径写错**。GLUE 的守卫只挂在 add/update 两个入口，
+且按 `GlueTypeEnum.isScript()` 判 —— GLUE_GROOVY 的 isScript 是 false，却会在执行器 JVM 里
+被 GroovyClassLoader.parseClass 编译执行，任意代码照样落地。闭环型检查对它完全无感
+（接缝看着是齐的），所以这里除了接缝清单，还钉判定实现本身的形状：
+白名单口径（只放行 BEAN）、name/desc 双形态、必须走 AccessControl.isAdmin()、
+判定唯一实现处（不许留第二份本地判定）、以及调用点数量下限。
+
 不该再加回本门禁的一条：`DataxJsonController#buildJobJson` **不以管理员判定收口**。
 它是普通用户建作业向导的唯一 JSON 生成入口，收归管理员等于把主流程关掉（上一版就是这么改坏的）。
 它的外发面靠"产出里不含账密"收口，由 `check_datasource_secret_scrub.py` 守，见那里的 job_json 三条件。
@@ -39,8 +46,8 @@ KINDS = {
     "self": r"AccessControl\.requireSelfOrAdmin\s*\(",
     "owner": r"(?:AccessControl\.denyUnlessAdminOrOwner|denyUnlessCanOperate)\s*\(",
     "stored": r"jobLogMapper\.load\s*\(",
-    # GLUE 脚本型任务的守卫：denyGlueScriptIfNotAdmin 内部走 AccessControl.isAdmin()
-    "glue_script": r"denyGlueScriptIfNotAdmin\s*\(",
+    # GLUE 任务的管理员守卫：判定唯一实现处是 GlueScriptAccess，内部走 AccessControl.isAdmin()
+    "glue_script": r"GlueScriptAccess\.denyMessage\s*\(",
 }
 
 # (文件, 方法名, 判定类型)
@@ -80,11 +87,16 @@ RULES = [
     ("controller/JobDatasourceController.java", "update", "admin"),
     ("controller/JobDatasourceController.java", "delete", "admin"),
     ("controller/JobDatasourceController.java", "dataSourceTest", "admin"),
-    # GLUE 脚本型任务（Shell/Python/…）的 add/update 收归管理员：
+    # GLUE 脚本型 / Groovy 任务的写入口收归管理员。
+    # 会写 job_info 的 glue_type/glue_source 的入口一共 5 个（两条 SQL：JobInfoMapper.xml 的 save 与 update），
+    # 少判一个等于留一条后门 —— 上一版只判了 add/update，被复核抓到 batchAdd 与 /jobcode/save 两条。
     # ScriptJobHandler → ScriptUtil.markScriptFile → Runtime.exec，
-    # 脚本内容本身就是命令，参数守卫对它无效。
+    # 脚本内容本身就是命令，参数守卫对它无效；GLUE_GROOVY 更狠，直接在执行器 JVM 里 parseClass。
     ("controller/JobInfoController.java", "add", "glue_script"),
     ("controller/JobInfoController.java", "update", "glue_script"),
+    ("controller/JobCodeController.java", "save", "glue_script"),
+    ("controller/JobTemplateController.java", "add", "glue_script"),
+    ("service/impl/JobServiceImpl.java", "batchAdd", "glue_script"),
 ]
 
 
@@ -318,6 +330,74 @@ def check_is_admin_behavior():
     return True, "OK   isAdmin() 用角色常量做比较"
 
 
+GLUE_CALL_SITE_MIN = 5
+
+
+def check_glue_guard_impl():
+    """接缝接上了还不够，判定本身的形状也要钉住 —— 这一批坏就坏在判定写错了口径。
+
+    上一版是 `glue != null && glue.isScript() && !isAdmin()`，两个洞：
+      1) GLUE_GROOVY 的 isScript 是 false，但它走 GlueFactory(GroovyClassLoader.parseClass)，
+         在执行器 JVM 里编译执行任意代码；
+      2) `glue != null` 让"枚举里没有的串"直接放行。
+    所以口径必须是白名单（只放行 BEAN），而且要同时认 name 与 desc 两种形态。
+    """
+    path = SRC / "security/GlueScriptAccess.java"
+    if not path.exists():
+        return ["FAIL: GlueScriptAccess.java 不存在，GLUE 管理员判定没有唯一实现处"]
+
+    text = strip_comments(path.read_text(encoding="utf-8"))
+    failed = []
+
+    only = method_body(text, "isAdminOnly")
+    if only is None:
+        failed.append("FAIL: GlueScriptAccess 里找不到 isAdminOnly() 的实现体")
+    else:
+        if "isScript" in only:
+            failed.append("FAIL: isAdminOnly() 又按 isScript() 判了 —— GLUE_GROOVY 的 isScript 是 false，"
+                          "但它会在执行器 JVM 里编译执行，正是这一批补的洞")
+        if "GlueTypeEnum.BEAN" not in only:
+            failed.append("FAIL: isAdminOnly() 没有以 GlueTypeEnum.BEAN 为白名单口径，"
+                          "改成枚举取反之外的写法（例如只判 null）就等于放开")
+
+    parse = method_body(text, "parse")
+    if parse is None:
+        failed.append("FAIL: GlueScriptAccess 里找不到 parse() 的实现体")
+    elif ".name()" not in parse or ".getDesc()" not in parse:
+        failed.append("FAIL: parse() 没有同时比 .name() 与 .getDesc() —— 前端发 name、"
+                      "JobServiceImpl 的历史判定比 desc，只认一种对另一半恒为 false")
+
+    deny = method_body(text, "denyMessage")
+    if deny is None:
+        failed.append("FAIL: GlueScriptAccess 里找不到 denyMessage() 的实现体")
+    elif "AccessControl.isAdmin()" not in deny:
+        failed.append("FAIL: denyMessage() 没有走 AccessControl.isAdmin()，管理员也会被挡住")
+
+    # 唯一实现处：不允许控制器里再留一份本地判定
+    hits = []
+    for p in SRC.rglob("*.java"):
+        body = strip_comments(p.read_text(encoding="utf-8"))
+        if "denyGlueScriptIfNotAdmin" in body:
+            hits.append(p.name)
+    if hits:
+        failed.append("FAIL: 旧的本地判定 denyGlueScriptIfNotAdmin 还留在 %s —— "
+                      "两份判定必然漂移，请统一走 GlueScriptAccess" % sorted(hits))
+
+    call_sites = 0
+    for p in SRC.rglob("*.java"):
+        if p.name == "GlueScriptAccess.java":
+            continue
+        call_sites += len(re.findall(r"GlueScriptAccess\.denyMessage\s*\(",
+                                     strip_comments(p.read_text(encoding="utf-8"))))
+    if call_sites < GLUE_CALL_SITE_MIN:
+        failed.append("FAIL: GlueScriptAccess.denyMessage 的调用点只有 %d 处，少于 %d 处"
+                      "（glue 列的写入口一共 5 个：/api/job/add、/api/job/update、/jobcode/save、"
+                      "/api/job/batchAdd、/api/jobTemplate/add）" % (call_sites, GLUE_CALL_SITE_MIN))
+    else:
+        print("OK   GLUE 管理员判定：唯一实现处 + %d 个调用点 + 白名单口径" % call_sites)
+    return failed
+
+
 def main():
     failed = []
     for rel, method, kind in RULES:
@@ -353,6 +433,8 @@ def main():
         print(why)
     else:
         failed.append(why)
+
+    failed += check_glue_guard_impl()
 
     # 种子 role 必须落在权限模型认得的取值域里
     seed_ok, seed_msgs = check_seed_roles()

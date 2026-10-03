@@ -2,7 +2,6 @@ package com.wugui.datax.admin.controller;
 
 
 import com.wugui.datatx.core.biz.model.ReturnT;
-import com.wugui.datatx.core.glue.GlueTypeEnum;
 import com.wugui.datatx.core.util.DateUtil;
 import com.wugui.datax.admin.core.cron.CronExpression;
 import com.wugui.datax.admin.core.thread.JobTriggerPoolHelper;
@@ -13,6 +12,7 @@ import com.wugui.datax.admin.dto.TriggerJobDto;
 import com.wugui.datax.admin.entity.JobInfo;
 import com.wugui.datax.admin.mapper.JobInfoMapper;
 import com.wugui.datax.admin.security.AccessControl;
+import com.wugui.datax.admin.security.GlueScriptAccess;
 import com.wugui.datax.admin.service.JobService;
 import io.swagger.annotations.Api;
 import io.swagger.annotations.ApiOperation;
@@ -60,30 +60,6 @@ public class JobInfoController extends BaseController{
         return null;
     }
 
-    /**
-     * GLUE 脚本型任务的 add/update 收归管理员。
-     *
-     * 链路：ScriptJobHandler → ScriptUtil.markScriptFile → Runtime.exec（或 ProcessBuilder）。
-     * 任何登录用户存一段脚本就等于在执行器主机上以执行器用户身份跑任意命令。
-     * JobParamSafety 管的是"拼进命令行的片段"，脚本任务的整段 glueSource 本身就是命令，
-     * 所以参数守卫对它无效，只能在入口处按角色拦。
-     *
-     * 反向红线：BEAN 类型（数据同步）不受影响，普通用户仍可建普通同步任务。
-     */
-    private static ReturnT<String> denyGlueScriptIfNotAdmin(JobInfo jobInfo) {
-        if (jobInfo == null || jobInfo.getGlueType() == null) {
-            return null;
-        }
-        GlueTypeEnum glue = GlueTypeEnum.match(jobInfo.getGlueType());
-        if (glue != null && glue.isScript() && !AccessControl.isAdmin()) {
-            return new ReturnT<>(ReturnT.FAIL_CODE,
-                    "脚本型任务（" + glue.getDesc() + "）的创建和修改需要管理员权限，"
-                    + "脚本内容会在执行器主机上直接执行");
-        }
-        return null;
-    }
-
-
     @GetMapping("/pageList")
     @ApiOperation("任务列表")
     public ReturnT<Map<String, Object>> pageList(@RequestParam(required = false, defaultValue = "0") int current,
@@ -102,13 +78,11 @@ public class JobInfoController extends BaseController{
     @PostMapping("/add")
     @ApiOperation("添加任务")
     public ReturnT<String> add(HttpServletRequest request, @RequestBody JobInfo jobInfo) {
-        // GLUE 脚本型任务收归管理员：ScriptJobHandler → ScriptUtil.markScriptFile → Runtime.exec，
-        // 任何登录用户存一段脚本就等于在执行器主机上以执行器用户身份跑任意命令。
-        // 参数守卫（JobParamSafety）管的是"拼进命令行的片段"，脚本任务的整段内容本身就是命令，
-        // 只能在入口处按角色拦。
-        ReturnT<String> glueDeny = denyGlueScriptIfNotAdmin(jobInfo);
+        // GLUE 任务收归管理员：判定只在 GlueScriptAccess 一处，理由见该类注释
+        // （按 isScript 判会漏掉 GLUE_GROOVY —— 它在执行器 JVM 里编译执行，同样是任意代码执行）。
+        String glueDeny = GlueScriptAccess.denyMessage(jobInfo.getGlueType());
         if (glueDeny != null) {
-            return glueDeny;
+            return new ReturnT<>(ReturnT.FAIL_CODE, glueDeny);
         }
         // JobInfo.userId 是基本类型 int，而 getCurrentUserId 在登录态失效时返回 null（批次10-D 的口径），
         // 直接传进 setUserId 就是拆箱 NPE → 500。归属判据取不到必须明确拒，
@@ -124,11 +98,11 @@ public class JobInfoController extends BaseController{
     @PostMapping("/update")
     @ApiOperation("更新任务")
     public ReturnT<String> update(HttpServletRequest request,@RequestBody JobInfo jobInfo) {
-        // GLUE 脚本型任务的更新同样收归管理员（与 add 同理）：
-        // 把一个 BEAN 类型的任务改成 GLUE_SHELL 再填脚本内容，效果等于绕过 add 的守卫。
-        ReturnT<String> glueDeny = denyGlueScriptIfNotAdmin(jobInfo);
+        // GLUE 任务的更新同样收归管理员（与 add 同理）：
+        // 把一个 BEAN 类型的任务改成 GLUE_SHELL / GLUE_GROOVY 再填内容，效果等于绕过 add 的守卫。
+        String glueDeny = GlueScriptAccess.denyMessage(jobInfo.getGlueType());
         if (glueDeny != null) {
-            return glueDeny;
+            return new ReturnT<>(ReturnT.FAIL_CODE, glueDeny);
         }
         JobInfo exists = jobInfoMapper.loadById(jobInfo.getId());
         ReturnT<String> deny = denyUnlessCanOperate(exists, request);

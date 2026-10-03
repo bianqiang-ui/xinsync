@@ -6,7 +6,16 @@ import io
 import os
 import sys
 
-import yaml
+try:
+    import yaml
+except ImportError:
+    # PyYAML 不在 JDK8 构建镜像里（那里只有 python3 标准库）。这条不是"环境问题可以忽略"：
+    # 缺库时必须**响亮地**失败并给出下一步，绝不能让门禁在 traceback 里静默消失。
+    sys.stderr.write(
+        "FAIL 缺少 PyYAML，无法解析 YAML。\n"
+        "   任选其一：pip install pyyaml  或  在宿主 python（装有 PyYAML）上跑本门禁：\n"
+        "   python3 devops/checks/check_yaml.py\n")
+    sys.exit(1)
 
 
 class DuplicateKeyLoader(yaml.SafeLoader):
@@ -52,7 +61,15 @@ def main():
             print("FAIL %s -> %s" % (os.path.relpath(path, root), exc))
 
     print("checked=%d failed=%d" % (len(targets), failed))
-    return 1 if failed else 0
+    if failed:
+        print("FAIL: %d 份 YAML 有问题（共查 %d 份）" % (failed, len(targets)))
+        return 1
+    if not targets:
+        # 一份都没查到 = 扫描根走空了（改名/移动目录都会这样），不能算通过
+        print("FAIL: 没有发现任何 .yml/.yaml，扫描根 %s 是否还是仓库根？" % root)
+        return 1
+    print("PASS: %d 份 YAML 语法与同层重复键检查通过" % len(targets))
+    return 0
 
 
 if __name__ == "__main__":

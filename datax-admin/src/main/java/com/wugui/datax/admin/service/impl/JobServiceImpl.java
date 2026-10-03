@@ -19,6 +19,7 @@ import com.wugui.datax.admin.mapper.*;
 import com.wugui.datax.admin.service.DatasourceQueryService;
 import com.wugui.datax.admin.service.DataxJsonService;
 import com.wugui.datax.admin.service.JobService;
+import com.wugui.datax.admin.security.GlueScriptAccess;
 import com.wugui.datax.admin.util.DateFormatUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
@@ -472,6 +473,15 @@ public class JobServiceImpl implements JobService {
         String templateParamDeny = JobParamSafety.denyMessage(jobTemplate.getJvmParam(), null, null, null, null);
         if (templateParamDeny != null) {
             return new ReturnT<>(ReturnT.FAIL_CODE, templateParamDeny);
+        }
+
+        // 同理，模板的 glueType/glueSource 也会被 copyProperties 原样拷进每一个新建任务：
+        // 普通用户挑一个 GLUE 模板批量一次，就落库一整批可执行脚本的任务，
+        // 而 add/update 上的管理员判定他一条都没碰到。判定放在这里而不是控制器，
+        // 是因为模板上面已经 load 出来了（batchAdd 只有控制器这一个调用方，不会影响 start/stop）。
+        String templateGlueDeny = GlueScriptAccess.denyMessage(jobTemplate.getGlueType());
+        if (templateGlueDeny != null) {
+            return new ReturnT<>(ReturnT.FAIL_CODE, templateGlueDeny);
         }
 
         List<String> rColumns;

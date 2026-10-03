@@ -40,13 +40,20 @@
 #      还原点唯一、且不含引用的存量密文任务原样放行；反向钉住"普通用户的建作业向导必须照常可用"
 #      —— 上一版正是用"buildJson 收归管理员"去堵这条面，把主流程整个关掉了。
 #
+#  13) GlueScriptAccessTest —— GLUE 任务的管理员判定：口径必须是"只放行 BEAN"的白名单，
+#      不能按 isScript() 判（GLUE_GROOVY 的 isScript 是 false，却在执行器 JVM 里
+#      GroovyClassLoader.parseClass 直接执行任意代码），而且 glue 列的 5 个写入口
+#      （/api/job/add、/api/job/update、/jobcode/save、/api/job/batchAdd、/api/jobTemplate/add）
+#      要一个一个钉住 —— 上一版只接了 add/update。/jobcode/save 请求体里没有 glueType，
+#      类型只能取库里那一行。反向红线：BEAN 主流程与管理员自身的能力都必须照常可用。
+#
 # 判定标准与 TDSQL 门禁完全一致（同一个 lib）：测试没被编译/没跑起来，本身就判失败。
 set -u
 
 cd "$(dirname "$0")/../.." || exit 1
 . devops/checks/lib_mvn_test_gate.sh
 
-GATE_TESTS="JobDatasourceControllerUpdateTest,JobScheduleHelperMisfireLogTest,BaseQueryToolMaxIdTest,AccessControlTest,JobServiceBatchAddOwnerTest,SqlSafeIdentifierTest,BaseFormOrderByWhitelistTest,JobLogControllerOwnershipTest,JwtAuthFailurePathTest,OwnerStampNullSafeTest,JobServiceUpdateParamTest,JobDatasourceSecretScrubTest,DsSecretPlaceholderTest"
+GATE_TESTS="JobDatasourceControllerUpdateTest,JobScheduleHelperMisfireLogTest,BaseQueryToolMaxIdTest,AccessControlTest,JobServiceBatchAddOwnerTest,SqlSafeIdentifierTest,BaseFormOrderByWhitelistTest,JobLogControllerOwnershipTest,JwtAuthFailurePathTest,OwnerStampNullSafeTest,JobServiceUpdateParamTest,JobDatasourceSecretScrubTest,DsSecretPlaceholderTest,GlueScriptAccessTest"
 
 # 上游自带的测试类大多要连真库/真服务，在这个 fork 的门禁环境里跑不了。
 # 但"新写了一个 *Test 却没进任何名单"必须当场 FAIL —— 否则门禁名单会变成静默漏跑的黑名单，

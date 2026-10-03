@@ -7,6 +7,7 @@ import com.wugui.datax.admin.entity.JobLogGlue;
 import com.wugui.datax.admin.mapper.JobInfoMapper;
 import com.wugui.datax.admin.mapper.JobLogGlueMapper;
 import com.wugui.datax.admin.security.AccessControl;
+import com.wugui.datax.admin.security.GlueScriptAccess;
 import io.swagger.annotations.Api;
 import io.swagger.annotations.ApiOperation;
 import org.springframework.ui.Model;
@@ -53,6 +54,15 @@ public class JobCodeController extends BaseController {
         String deny = AccessControl.denyUnlessAdminOrOwner(existsJobInfo.getUserId(), getCurrentUserId(request));
         if (deny != null) {
             return new ReturnT<>(FAIL_CODE, deny);
+        }
+
+        // 上面那道归属判定挡不住"属主本人改自己的 GLUE 任务脚本"——对脚本型任务而言
+        // 这就等于在自己机器上任意执行代码，所以脚本型/Groovy 一律要管理员。
+        // 这里的 glueType 只能取库里那一行：/jobcode/save 的请求体里根本没有 glueType，
+        // 前端只传 id/glueSource/glueRemark，按请求判会恒为"放行"。
+        String glueDeny = GlueScriptAccess.denyMessage(existsJobInfo.getGlueType());
+        if (glueDeny != null) {
+            return new ReturnT<>(FAIL_CODE, glueDeny);
         }
 
         // update new code

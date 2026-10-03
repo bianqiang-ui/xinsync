@@ -8,6 +8,7 @@ import com.wugui.datax.admin.core.util.I18nUtil;
 import com.wugui.datax.admin.entity.JobTemplate;
 import com.wugui.datax.admin.mapper.JobTemplateMapper;
 import com.wugui.datax.admin.security.AccessControl;
+import com.wugui.datax.admin.security.GlueScriptAccess;
 import com.wugui.datax.admin.service.JobTemplateService;
 import io.swagger.annotations.Api;
 import io.swagger.annotations.ApiOperation;
@@ -66,6 +67,13 @@ public class JobTemplateController extends BaseController{
     @PostMapping("/add")
     @ApiOperation("添加任务模板")
     public ReturnT<String> add(HttpServletRequest request, @RequestBody JobTemplate jobTemplate) {
+        // 模板的 glueType/glueSource 会被 /api/job/batchAdd 的 copyProperties 原样拷进新建任务，
+        // 于是"建一个 GLUE 模板 + 批量一次"就是普通用户落脚本任务的另一条路。
+        // 模板页只提供 BEAN（前端 glueTypes 列表里只有 BEAN 一项），这条判定不会挡住正常用法。
+        String glueDeny = GlueScriptAccess.denyMessage(jobTemplate.getGlueType());
+        if (glueDeny != null) {
+            return new ReturnT<>(ReturnT.FAIL_CODE, glueDeny);
+        }
         // 同 JobInfoController#add：JobTemplate.userId 是 int，null 拆箱就是 500；
         // 批量建任务会按模板的 user_id 落归属（batchAdd），模板没有属主会让整批任务无主。
         Integer currentUserId = getCurrentUserId(request);
