@@ -1,10 +1,10 @@
-﻿# XinSync 信数通
+# XinSync 信数通
 
 **信创数据同步，安全可控**
 
 信创生态下的企业级数据集成平台 · 基于 DataX 深度安全加固
 
-[![License MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/bianqiang-ui/xinsync/blob/master/LICENSE) [![Version](https://img.shields.io/badge/Version-2.1.2--xinsync-green.svg)](https://github.com/bianqiang-ui/xinsync/releases) ![JDK](https://img.shields.io/badge/JDK-1.8+-orange.svg) ![Spring Boot](https://img.shields.io/badge/Spring%20Boot-2.1.x-brightgreen.svg) ![Security](https://img.shields.io/badge/Security-13%2F15%20Fixed-blueviolet.svg)
+[![License MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/bianqiang-ui/xinsync/blob/master/LICENSE) [![Version](https://img.shields.io/badge/Version-2.1.2--xinsync-green.svg)](https://github.com/bianqiang-ui/xinsync/releases) ![JDK](https://img.shields.io/badge/JDK-1.8+-orange.svg) ![Spring Boot](https://img.shields.io/badge/Spring%20Boot-2.1.x-brightgreen.svg) ![Gates](https://img.shields.io/badge/Quality%20Gates-13-blueviolet.svg)
 
 [中文](README.md) · [English](README_EN.md) · [GitHub](https://github.com/bianqiang-ui/xinsync) · [Gitee 国内镜像](https://gitee.com/brian888/xinsync)
 
@@ -14,16 +14,17 @@
 
 **XinSync 信数通** 是基于开源项目 [DataX-Web](https://github.com/WeiYe-Jing/datax-web)（v2.1.2）深度安全加固的信创数据同步平台。针对信创生态下的数据迁移、数据同步、异构数据库集成等场景，提供 **安全可控、开箱即用** 的 Web 化管理能力。
 
-### 🔥 这是一次脱胎换骨的彻底改造
+### 这次改造做了什么
 
-> 本项目 **不是简单的 Bug 修复**，而是对原版 DataX-Web 进行的一次 **全方位、系统性的安全重塑**：
+> 不是简单的 Bug 修复，而是把原版"能跑起来就行"的代码base 重做了一遍安全与可维护性收口：
 >
-> - 📊 **29 次提交**，涉及 **100+ 个文件**，新增 **6,500+ 行代码**
-> - 🔒 修复 **15 个安全漏洞**（含 5 个 CRITICAL 级别），封堵了从 RCE 远程代码执行到越权访问的全部高危攻击面
-> - 🛡️ 建立 **31 条授权接缝** 全覆盖的权限体系，从"几乎裸奔"到"全面设防"
-> - ✅ 解决 **15 个社区长期悬而未决的 Issue**，包括进程残留、DDL 兼容、口令泄漏等顽疾
-> - 🏗️ 构建 **9 道自动化安全门禁**，每次改动可一键验证，杜绝安全回退
-> - 📝 输出 **1,290+ 行开发日志** + **270 行技术手册**，全程可追溯
+> - 📊 **45 次提交**，涉及 **134 个文件**，新增 **13,976 行代码**（对比上游基线 `upstream-baseline`，
+>   2026-10-03 第十八轮收口时实测，可用 `git diff --shortstat upstream-baseline..HEAD` 复现；数字随批次前移）
+> - 🔒 修复 **15 项安全漏洞**（含 5 项 CRITICAL）：RPC 反序列化 RCE、越权（IDOR）、命令注入、Log4Shell、GLUE 脚本 RCE 等
+> - 🛡️ **33 条授权接缝** 逐条闭环判定（`AccessControl` 单点实现），从"只有登录判定"到"角色 + 归属双层"
+> - ✅ 收口 **社区长期悬而未决的 Issue**：#487 进程树残留、#296 Hive 连接、#389 定时任务不触发、#265 HBase 数据源等
+> - 🏗️ 内置 **13 道自动化质量门禁**，任何改动都能一键复跑验证（见下文"质量门禁"）
+> - 📝 **2,024 行开发日志** + 技术手册 + 升级说明，每批改动都带实测证据与反证记录
 >
 > **原版是一把好刀，我们给它淬了火、开了刃、配了鞘。**
 
@@ -31,12 +32,13 @@
 
 | 维度 | 原版 DataX-Web | XinSync 信数通 |
 |------|---------------|---------------|
-| **安全加固** | 存在 15 个已知安全漏洞 | 13 个完全修复，2 个部分修复 |
-| **授权体系** | 无系统化鉴权 | 31 条授权接缝全覆盖 + IDOR 防护 |
-| **口令保护** | API 返回明文密码 | 全链路口令脱敏（API/日志/临时文件） |
-| **依赖安全** | Log4j 等存在 CVE | Log4j2 2.17.2 / Logback 1.2.13 / Fastjson 1.2.83 |
-| **信创适配** | 无 | TDSQL DDL 改写、国产数据库元数据支持 |
-| **质量门禁** | 无 | 9 个自动化安全检查 + 可复跑验证 |
+| **维护状态** | 2024-06 停更（Issue 开放 180+） | 持续维护，逐批带实测证据 |
+| **安全加固** | 15 项已知高危漏洞 | 13 项已修复，2 项部分修复（见 CHANGELOG） |
+| **授权体系** | 仅"是否登录"一层 | 33 条授权接缝 + IDOR 归属判定（归属只从库里取） |
+| **口令保护** | API 返回明文/密文口令 | 全链路脱敏：API 掩码 / job_json 只写引用 / 日志与 RPC 出口遮蔽 / 临时文件创建即 0600 |
+| **依赖安全** | Log4j2 2.11.2、Logback 1.2.3 等 | Log4j2 2.17.2 / Logback 1.2.13 / Fastjson 1.2.83 / Netty 4.1.100.Final 全局锁定 |
+| **信创适配** | 无 | TDSQL 数据源接缝 + DDL 自动改写（分片键/主键/索引） |
+| **质量门禁** | 无 | 13 道可复跑门禁 + 全仓库 shell 语法检查 |
 
 ---
 
@@ -44,7 +46,7 @@
 
 ```mermaid
 graph TB
-    subgraph Web["🖥️ XinSync Admin (Web UI)"]
+    subgraph Web["🖥️ XinSync Admin (Web UI, 9527)"]
         direction TB
         SB["Spring Boot 2.1.x + Spring Security JWT + MyBatis"]
         subgraph Modules["核心模块"]
@@ -52,12 +54,12 @@ graph TB
             DS["🗄️ 数据源管理"]
             JB["⚙️ JSON 构建 & 调度"]
         end
-        AC["🔐 AccessControl 集中授权<br/>31 条授权接缝全覆盖"]
+        AC["🔐 AccessControl 集中授权"]
         SB --> Modules
         Modules --> AC
     end
 
-    subgraph Executor["⚡ XinSync Executor (执行器集群)"]
+    subgraph Executor["⚡ XinSync Executor (执行器, Web 9504 / RPC 9999)"]
         direction TB
         subgraph Workers["执行组件"]
             DX["🔄 DataX 引擎"]
@@ -70,10 +72,10 @@ graph TB
 
     subgraph Security["🔒 安全防护层"]
         direction LR
-        HW["Hessian 白名单<br/>反序列化"]
-        SI["SqlSafeIdentifier<br/>SQL 注入防护"]
-        CM["口令全链路脱敏<br/>API / 日志 / 文件"]
-        GS["GLUE 脚本 RCE<br/>管理员限制"]
+        HW["Hessian 白名单反序列化"]
+        SI["SqlSafeIdentifier<br/>SQL 标识符白名单"]
+        CM["SensitiveLogMask<br/>口令出日志前遮蔽"]
+        GS["GLUE 脚本型任务收归管理员"]
     end
 
     subgraph DataSources["💾 数据源"]
@@ -88,7 +90,7 @@ graph TB
         ClickHouse
     end
 
-    Web -->|"Hessian RPC<br/>(白名单序列化)"| Executor
+    Web -->|"Hessian RPC<br/>(accessToken + 白名单序列化)"| Executor
     Executor --> DataSources
     Security -.->|"防护覆盖"| Web
     Security -.->|"防护覆盖"| Executor
@@ -101,7 +103,7 @@ graph TB
 ### 数据同步核心
 
 - ✅ 支持 **MySQL、PostgreSQL、Oracle、SQL Server、ClickHouse、Hive、HBase、MongoDB** 等主流数据源
-- ✅ 支持 **TDSQL**（腾讯分布式数据库）DDL 自动改写
+- ✅ 支持 **TDSQL**（腾讯分布式数据库）作为数据源，并提供 DDL 自动改写（shardkey / 主键 / 索引）
 - ✅ Web 界面可视化构建 DataX JSON 任务
 - ✅ RDBMS 数据源 **批量创建** 同步任务
 - ✅ 支持 **增量同步**（时间戳/主键自增）
@@ -113,40 +115,47 @@ graph TB
 - ✅ 执行器 **集群部署**，支持 9 种路由策略
 - ✅ 任务超时控制、失败重试、失败告警
 - ✅ 任务依赖（父子任务联动）
-- ✅ 支持 DataX / Shell / Python / PowerShell 四种任务类型
+- ✅ 支持 DataX / Shell / Python / PowerShell 四种任务类型（脚本型任务限管理员，见安全章节）
 - ✅ 执行器 CPU / 内存 / 负载实时监控
 
 ### 🔒 安全加固（XinSync 独有）
 
-- ✅ **RPC 反序列化防护** — Hessian 白名单序列化工厂
-- ✅ **IDOR 越权防护** — 31 条授权接缝全覆盖（AccessControl 集中管控）
-- ✅ **命令注入防护** — JobParamSafety 双关口（入库 + 执行）
-- ✅ **SQL 注入防护** — SqlSafeIdentifier 白名单校验
-- ✅ **GLUE 脚本 RCE 防护** — 脚本型任务限管理员操作
-- ✅ **口令全链路脱敏** — API 响应掩码 / 日志脱敏 / 临时文件 0600 权限
-- ✅ **JWT 安全** — 密钥环境变量化，拒绝硬编码
-- ✅ **Log4Shell 修复** — Log4j2 升级至 2.17.2
-- ✅ **依赖安全基线** — Logback 1.2.13 / Fastjson 1.2.83 / Netty 4.1.100
+- ✅ **RPC 反序列化防护** — Hessian 白名单序列化工厂 + `accessToken` 两侧强制校验
+- ✅ **IDOR 越权防护** — 33 条授权接缝闭环判定（`AccessControl` 唯一实现处，归属只取库里那一行）
+- ✅ **命令注入防护** — `JobParamSafety` 双关口（入库校验 + 执行器拼命令前二次校验）
+- ✅ **SQL 注入防护** — `SqlSafeIdentifier` 排序/筛选标识符白名单
+- ✅ **GLUE 脚本 RCE 防护** — 除 `BEAN` 外的脚本型任务一律收归管理员（含 `GLUE_GROOVY`）
+- ✅ **口令全链路脱敏** — API 回掩码 / job_json 只写数据源引用 / 日志与 RPC 出口遮蔽 / 临时文件创建即 0600 + 启动清理
+- ✅ **JWT 安全** — 密钥来自 `${DATAX_JWT_SECRET}`，不再硬编码
+- ✅ **Log4Shell 修复** — Log4j2 升至 2.17.2，根 POM `dependencyManagement` 全局锁定
+- ✅ **依赖安全基线** — Logback 1.2.13 / Fastjson 1.2.83 / Netty 4.1.100.Final
 
 ### 🛡️ 质量门禁系统
 
-项目内置 **9 个自动化安全检查**，每次修改都可复跑验证：
+项目内置 **13 道自动化质量门禁**，全部随仓库交付，任何改动都能一键复跑：
 
 ```bash
-bash tools/fork-workflow.sh recheck
+bash devops/fork-workflow.sh recheck
 ```
 
 | 门禁 | 检查内容 |
 |------|---------|
-| `check_authz_seams.py` | 31 条授权接缝闭合验证 |
-| `check_sql_identifiers.py` | SQL 标识符白名单 |
-| `check_datasource_secret_scrub.py` | 数据源口令脱敏 |
-| `check_job_param_safety.sh` | 命令注入参数校验 |
-| `check_admin_tests.sh` | 管理端单元测试 |
-| `check_ports.py` | 端口配置安全 |
-| `check_yaml.py` | YAML 配置合规 |
-| `check_tdsql.sh` | TDSQL DDL 改写测试 |
-| `check_executor_streams.py` | 执行器流处理 |
+| `devops/checks/check_yaml.py` | 所有 `application.yml` 可解析 + 无重复键 |
+| `devops/checks/check_ports.py` | 端口三处口径一致（yml / `bin/env.properties` / 脚本兜底） |
+| `devops/checks/check_authz_seams.py` | 33 条授权接缝逐条闭环判定 + 判定实现本身的形状 |
+| `devops/checks/check_sql_identifiers.py` | 排序/筛选标识符必须走 `SqlSafeIdentifier` 单点 |
+| `devops/checks/check_executor_streams.py` | #487：stdout/stderr 两个读取线程都必须在 `get()` 之前启动 |
+| `devops/checks/check_job_param_safety.sh` | 作业参数 shell 注入（core + executor 两模块单测真跑） |
+| `devops/checks/check_datasource_secret_scrub.py` | 数据源口令"只进不出"：读接口回掩码、向导产物不含口令 |
+| `devops/checks/check_log_secret_mask.sh` | 凭据出口遮蔽：四个出口 + `SensitiveLogMask` 唯一实现处 + 单测真跑 |
+| `devops/checks/check_executor_tmpfile.sh` | 执行器临时文件创建即 0600、启动清理有钩子有阈值有逃生口 |
+| `devops/checks/check_doc_secrets.py` | 对外文档不得出现可照抄的密钥字面值与维护者本机路径 |
+| `devops/checks/check_doc_commands.py` | 对外文档里每条可照抄命令都指向仓库内真实存在的路径 |
+| `devops/checks/check_admin_tests.sh` | 管理端回归单测真跑（拒绝 `Tests run: 0` 式假绿） |
+| `devops/checks/check_tdsql.sh` | TDSQL DDL 改写单测真跑 |
+
+> 门禁的判据是"真跑并且看得出现在"：跑 mvn 的检查要求 `Tests run` 为正、`Failures/Errors/Skipped` 为 0，
+> 只 grep 源码的检查则配反证（把守卫改坏必须变红）。每条门禁都有对应的反证记录，见 `docs/devlog.md`。
 
 ---
 
@@ -154,13 +163,13 @@ bash tools/fork-workflow.sh recheck
 
 ### 环境要求
 
-| 组件 | 版本要求 |
-|------|---------|
-| JDK | 1.8.201+ |
-| Maven | 3.6+ |
-| MySQL | 5.7+ |
-| Python | 2.7 / 3.x |
-| DataX | 已安装（[DataX 下载](https://github.com/alibaba/DataX)） |
+| 组件 | 版本要求 | 备注 |
+|------|---------|------|
+| JDK | 1.8 | 本仓库按 JDK 8 编译与验证 |
+| Maven | 3.6+ | |
+| MySQL | 5.7+ | 管理库；驱动为 `com.mysql.cj.jdbc.Driver` |
+| Python | 2.7 / 3.x | 执行器调用 `datax.py` 需要 |
+| DataX | 需已安装 | 执行器通过 `DATAX_HOME` 或 `datax.pypath` 定位 `datax.py` |
 
 ### 1. 克隆项目
 
@@ -171,72 +180,115 @@ cd xinsync
 
 ### 2. 初始化数据库
 
+脚本 `bin/db/datax_web.sql` 只建表、**不含建库语句**，所以先自己建库（库名要与后面的 `DB_DATABASE` 一致）：
+
 ```bash
-mysql -u root -p < doc/db/datax_web.sql
+mysql -u root -p -e "CREATE DATABASE IF NOT EXISTS dataxweb DEFAULT CHARACTER SET utf8mb4;"
+mysql -u root -p dataxweb < bin/db/datax_web.sql
 ```
 
-### 3. 修改配置
+初始账号是 `admin` / `123456`（口令列为 BCrypt 哈希，出厂明文只有这一个）。
 
-编辑 `datax-admin/src/main/resources/application.yml`：
+> ⚠️ **首次登录后请立即修改管理员密码。**
 
-```yaml
-spring:
-  datasource:
-    url: jdbc:mysql://localhost:3306/datax_web?useUnicode=true&characterEncoding=UTF-8
-    username: your_username
-    password: your_password
+### 3. 配置
 
-# JWT 密钥（务必修改，不要使用默认值！）
-jwt:
-  secret: ${JWT_SECRET:your-random-secret-here}
+配置口径以环境变量为准，`application.yml` 里写的是 `${DB_HOST:127.0.0.1}` 这类"变量 + 出厂默认值"：
+
+```bash
+# 管理库连接
+export DB_HOST=127.0.0.1
+export DB_PORT=3306
+export DB_DATABASE=dataxweb
+export DB_USERNAME=your_username
+export DB_PASSWORD=your_password
+
+# 三个安全相关密钥：必须自己生成，不要把示例值当真值用
+export DATAX_JWT_SECRET="$(openssl rand -base64 32)"     # JWT 签名密钥，留空会拒绝签发 token
+export DATAX_AES_KEY="$(openssl rand -hex 16)"           # 数据源口令加密密钥；出厂默认值必须换掉
+export DATAX_ACCESS_TOKEN="$(openssl rand -hex 16)"      # admin<->executor RPC 通道 token，两侧都要配
 ```
+
+> 密钥字面值一律不要写进配置文件提交，也不要写进任何公开文档/Issue。
+> Windows 上的等价配法见 `doc/XinSync-Windows-启动指南.md`。
 
 ### 4. 编译打包
 
+**必须用 `install`，不能用 `package`** —— 部署包（assembly 插件）绑定在 `install` 阶段产出：
+
 ```bash
-mvn clean package -Dmaven.test.skip=true
+mvn -B clean install -DskipTests
 ```
+
+产物（路径实测）：
+
+```
+packages/datax-admin_2.1.2_1.tar.gz        # 管理端：bin/ + conf/ + lib/
+packages/datax-executor_2.1.2_1.tar.gz     # 执行器：bin/ + conf/ + lib/
+build/datax-web-2.1.2.tar.gz               # 整合包（datax-assembly）
+```
+
+> `datax-admin/target/*.jar` 是**瘦 jar，MANIFEST 里没有 `Main-Class`**（本仓库不打 Spring Boot fat jar），
+> 所以 `java -jar` 起不来是设计如此，不是环境问题。启动一律走 tar 包里的 `bin/*.sh`。
 
 ### 5. 启动服务
 
 ```bash
-# 启动 Admin
-cd datax-admin/target
-java -jar datax-admin-*.jar
+# 两个包各解压到自己的目录（包内没有顶层目录，必须用 -C 指定）
+mkdir -p /opt/datax-web/admin /opt/datax-web/executor
+tar -zxf packages/datax-admin_2.1.2_1.tar.gz   -C /opt/datax-web/admin
+tar -zxf packages/datax-executor_2.1.2_1.tar.gz -C /opt/datax-web/executor
 
-# 启动 Executor
-cd datax-executor/target
-java -jar datax-executor-*.jar
+# 管理端（Web 端口 9527）
+cd /opt/datax-web/admin
+bash bin/datax-admin.sh start
+
+# 执行器（Web 端口 9504，RPC 端口 9999；需要指向 DataX 安装目录）
+cd /opt/datax-web/executor
+export DATAX_HOME=/opt/datax        # 其下须有 bin/datax.py
+bash bin/datax-executor.sh start
 ```
+
+端口默认值来自各包的 `bin/env.properties`（`SERVER_PORT` / `EXECUTOR_PORT`），改这里即可，
+不要靠命令行传 `--server.port`。启动是否成功看日志里的这三行：
+
+```
+Tomcat started on port(s): 9527
+Tomcat started on port(s): 9504
+NettyHttpServer, port = 9999
+```
+
+`bin/datax-admin.sh` / `bin/datax-executor.sh` 支持 `start | stop | restart | status`。
 
 ### 6. 访问 Web UI
 
 浏览器打开 `http://localhost:9527`，默认账号：`admin` / `123456`
 
-> ⚠️ **首次登录后请立即修改管理员密码！**
-
 ### Docker 部署
 
+本仓库**不提供 Dockerfile 与 docker-compose 文件**，因此没有"一键容器化部署"这一步。
+容器只被用作**构建与验证环境**（`maven:3.8-openjdk-8`），例如复跑门禁：
+
 ```bash
-cd build/docker
-docker-compose up -d
+docker run --rm -v "$(pwd)":/work -v datax-m2:/root/.m2 -w /work \
+  maven:3.8-openjdk-8 bash /work/devops/checks/check_admin_tests.sh
 ```
 
-详细部署文档：[部署指南](doc/datax-web/datax-web-deploy-V2.1.2.md)
+需要真正的容器化部署请先补 `Dockerfile`，欢迎提 PR。
+
+详细部署文档（含实测证据与踩坑对照）：[部署指南](doc/datax-web/datax-web-deploy-V2.1.2.md)
 
 ---
 
 ## 📊 信创适配说明
 
-XinSync 信数通特别适配了信创生态中常见的数据库和场景：
-
 | 信创数据库 | 支持状态 | 说明 |
 |-----------|---------|------|
-| **TDSQL**（腾讯云） | ✅ 完整支持 | DDL 自动改写（shardkey / 主键 / 索引） |
-| **MySQL 国产分支** | ✅ 完整支持 | 兼容 MySQL 协议的国产数据库 |
-| **PostgreSQL 国产分支** | ✅ 完整支持 | 含元数据查询优化 |
-| **Hive on 国产大数据平台** | ✅ 完整支持 | Kerberos 认证 + JDBC 连接 |
-| **Oracle 到国产库迁移** | ⚠️ 基本支持 | 元数据查询需真实环境验证 |
+| **TDSQL**（腾讯云） | ⚠️ 接缝 + 规则已落地 | 数据源类型/元数据/reader-writer 已打通，DDL 自动改写有单测；**分库分表编排与真集群端到端待实例验收** |
+| **MySQL 国产分支** | ✅ 支持 | 兼容 MySQL 协议，复用 `MySQLQueryTool` |
+| **PostgreSQL 国产分支** | ✅ 支持 | 含元数据查询修正 |
+| **Hive（含 Kerberos）** | ✅ 支持 | JDBC 连接与 `connectionTestQuery` 已针对 HiveServer2 收口 |
+| **Oracle → 国产库** | ⚠️ 需真实环境验证 | `all_*` 视图系改写已做，**无真实 Oracle 实例未实测** |
 
 ---
 
@@ -246,15 +298,10 @@ XinSync 信数通特别适配了信创生态中常见的数据库和场景：
 
 ### v2.1.2-xinsync 主要变更
 
-**安全修复（15 项，13 项完全修复）：**
-
 - 🔴 CRITICAL x 5：RPC 反序列化 RCE、IDOR 越权、命令注入、Log4Shell、GLUE 脚本 RCE
-- 🟠 HIGH x 6：SQL 注入、XSS、口令泄漏（3 处）、JWT 硬编码
-- 🟡 MEDIUM x 2：trigger_msg 脱敏、临时文件权限
-
-**社区 Issue 修复（16 项，15 项已修复）：**
-
-#487 进程树残留、#672 TDSQL DDL、#389 Hive Kerberos、#348 PostgreSQL 元数据 等
+- 🟠 HIGH x 6：SQL 注入、XSS、口令泄漏（API / job_json / 日志与 RPC / 临时文件）、JWT 硬编码密钥
+- 🟡 MEDIUM x 2：日志组件版本、依赖版本全局锁定
+- 社区 Issue 修复：#487 进程树残留、#296 Hive、#389 调度不触发、#265 HBase 数据源、#348/#512 Python 路径等
 
 ---
 
@@ -280,10 +327,14 @@ XinSync 信数通特别适配了信创生态中常见的数据库和场景：
 欢迎参与项目贡献！
 
 1. Fork 本仓库
-2. 创建特性分支：`git checkout -b feature/your-feature`
+2. 创建特性分支：`git checkout -b feature/your-branch`
 3. 提交修改：`git commit -m 'feat: add your feature'`
-4. 推送分支：`git push origin feature/your-feature`
+4. 推送分支：`git push origin feature/your-branch`
 5. 提交 Pull Request
+
+**改安全相关代码请一并做两件事**：把判定放进唯一实现处（`AccessControl` / `JobParamSafety` /
+`SensitiveLogMask` / `SqlSafeIdentifier` / `PrivateTmpFiles`），并在 `devops/checks/` 里补一条能复跑的门禁
+（或把新接缝登记进已有门禁）。改完跑 `bash devops/fork-workflow.sh recheck` 确认全绿。
 
 ### 提交规范
 

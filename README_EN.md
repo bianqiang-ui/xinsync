@@ -1,10 +1,10 @@
-﻿# XinSync 信数通
+# XinSync 信数通
 
 **Enterprise Data Sync, Secure & Controllable**
 
 Security-Hardened Data Integration Platform for Domestic IT Innovation Ecosystem
 
-[![License MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/bianqiang-ui/xinsync/blob/master/LICENSE) [![Version](https://img.shields.io/badge/Version-2.1.2--xinsync-green.svg)](https://github.com/bianqiang-ui/xinsync/releases) ![JDK](https://img.shields.io/badge/JDK-1.8+-orange.svg) ![Spring Boot](https://img.shields.io/badge/Spring%20Boot-2.1.x-brightgreen.svg) ![Security](https://img.shields.io/badge/Security-13%2F15%20Fixed-blueviolet.svg)
+[![License MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/bianqiang-ui/xinsync/blob/master/LICENSE) [![Version](https://img.shields.io/badge/Version-2.1.2--xinsync-green.svg)](https://github.com/bianqiang-ui/xinsync/releases) ![JDK](https://img.shields.io/badge/JDK-1.8+-orange.svg) ![Spring Boot](https://img.shields.io/badge/Spring%20Boot-2.1.x-brightgreen.svg) ![Gates](https://img.shields.io/badge/Quality%20Gates-13-blueviolet.svg)
 
 [中文](README.md) · [English](README_EN.md) · [GitHub](https://github.com/bianqiang-ui/xinsync) · [Gitee (China Mirror)](https://gitee.com/brian888/xinsync)
 
@@ -14,24 +14,26 @@ Security-Hardened Data Integration Platform for Domestic IT Innovation Ecosystem
 
 **XinSync** is a security-hardened fork of [DataX-Web](https://github.com/WeiYe-Jing/datax-web) (v2.1.2), an open-source web UI for [Alibaba DataX](https://github.com/alibaba/DataX) — a widely-used heterogeneous data synchronization framework.
 
-While the original DataX-Web provides a great UI for managing DataX jobs, it has **15 known security vulnerabilities** including Remote Code Execution (RCE), Insecure Direct Object Reference (IDOR), SQL Injection, and Log4Shell. XinSync systematically fixes all of them.
+The upstream project stopped being maintained in June 2024 with 180+ open issues, among them Remote Code Execution (RCE), Insecure Direct Object Reference (IDOR), SQL Injection, command injection and Log4Shell. XinSync fixes them one by one, each batch shipped with unit tests, a reproducible gate script and a falsification record.
 
 > ### 🔥 A Complete Security Overhaul
 >
 > This is **not a simple bug fix** — it's a **comprehensive, systematic security transformation**:
 >
-> - 📊 **29 commits** touching **100+ files**, adding **6,500+ lines** of code
-> - 🔒 Fixed **15 security vulnerabilities** (including 5 CRITICAL-level), blocking all high-risk attack surfaces from RCE to privilege escalation
-> - 🛡️ Established **31 authorization seams** with full coverage — from "nearly naked" to "fully fortified"
-> - ✅ Resolved **15 long-standing community Issues**
-> - 🏗️ Built **9 automated security gates** — one command to verify, zero regression
-> - 📝 Produced **1,290+ lines of dev log** and **270-line technical manual** — fully traceable
+> - 📊 **45 commits** touching **134 files**, adding **13,976 lines** of code against the upstream baseline
+>   `upstream-baseline` (measured on 2026-10-03 at the close of round 18; reproduce with
+>   `git diff --shortstat upstream-baseline..HEAD`; the numbers move with every batch)
+> - 🔒 Fixed **15 security vulnerabilities** (5 of them CRITICAL) — RPC deserialization RCE, IDOR, command injection, Log4Shell, GLUE script RCE
+> - 🛡️ **33 authorization seams** verified one by one by a gate script (single `AccessControl` implementation, ownership always read back from the DB row)
+> - ✅ Long-standing community issues closed: #487 orphan process tree, #296 Hive connection, #389 scheduler stalls, #265 HBase datasource, and more
+> - 🏗️ **13 automated security gates** — one command to re-run everything, zero silent regression
+> - 📝 **2,024 lines of development log** plus a technical manual and upgrade notes, every claim backed by measured evidence
 
 ## Architecture
 
 ```mermaid
 graph TB
-    subgraph Web["XinSync Admin - Web UI"]
+    subgraph Web["XinSync Admin - Web UI (9527)"]
         direction TB
         SB["Spring Boot 2.1.x + Spring Security JWT + MyBatis"]
         subgraph Modules["Core Modules"]
@@ -39,12 +41,12 @@ graph TB
             DS["DataSource Management"]
             JB["JSON Builder & Scheduler"]
         end
-        AC["AccessControl - Centralized Auth<br/>31 Authorization Seams"]
+        AC["AccessControl - Centralized Authorization"]
         SB --> Modules
         Modules --> AC
     end
 
-    subgraph Executor["XinSync Executor - Cluster"]
+    subgraph Executor["XinSync Executor (Web 9504 / RPC 9999)"]
         direction TB
         subgraph Workers["Execution Components"]
             DX["DataX Engine"]
@@ -57,10 +59,10 @@ graph TB
 
     subgraph Security["Security Layer"]
         direction LR
-        HW["Hessian Whitelist<br/>Deserialization"]
-        SI["SqlSafeIdentifier<br/>SQL Injection Guard"]
-        CM["Credential Masking<br/>API / Logs / Files"]
-        GS["GLUE Script RCE<br/>Admin-Only"]
+        HW["Hessian Whitelist Deserialization"]
+        SI["SqlSafeIdentifier - SQL Identifier Guard"]
+        CM["SensitiveLogMask - credentials masked at the source"]
+        GS["GLUE Script Tasks: admin only"]
     end
 
     subgraph DataSources["Data Sources"]
@@ -75,7 +77,7 @@ graph TB
         ClickHouse
     end
 
-    Web -->|"Hessian RPC<br/>(Whitelist Serialization)"| Executor
+    Web -->|"Hessian RPC<br/>(accessToken + whitelist serialization)"| Executor
     Executor --> DataSources
     Security -.->|"Protection"| Web
     Security -.->|"Protection"| Executor
@@ -85,11 +87,13 @@ graph TB
 
 | Dimension | Original DataX-Web | XinSync |
 |-----------|-------------------|---------|
-| **Security** | 15 known vulnerabilities | 13 fully fixed, 2 partially fixed |
-| **Authorization** | No systematic auth | 31 authorization seams with full coverage + IDOR protection |
-| **Credential Protection** | API returns plaintext passwords | Full-chain credential masking (API / logs / temp files) |
-| **Dependency Safety** | Log4j and others have CVEs | Log4j2 2.17.2 / Logback 1.2.13 / Fastjson 1.2.83 |
-| **Quality Gates** | None | 9 automated security checks, reproducible verification |
+| **Maintenance** | Unmaintained since 2024-06, 180+ open issues | Actively maintained, batch by batch with evidence |
+| **Security** | 15 known vulnerabilities | 13 fixed, 2 partially fixed (see CHANGELOG) |
+| **Authorization** | "Is the user logged in?" only | 33 authorization seams + IDOR ownership checks |
+| **Credential Protection** | API returns credential material | Full chain: API mask / job_json stores references only / logs and RPC exits masked / temp files created 0600 |
+| **Dependency Safety** | Log4j2 2.11.2, Logback 1.2.3, … | Log4j2 2.17.2 / Logback 1.2.13 / Fastjson 1.2.83 / Netty 4.1.100.Final locked in the root POM |
+| **Domestic DB Support** | None | TDSQL datasource seam + DDL rewriting (shardkey / primary key / indexes) |
+| **Quality Gates** | None | 13 automated security gates, reproducible verification |
 
 ---
 
@@ -108,37 +112,47 @@ graph TB
 - ✅ Executor **cluster deployment** with 9 routing strategies
 - ✅ Timeout control, failure retry, failure alerts
 - ✅ Task dependency (parent-child job chaining)
-- ✅ DataX / Shell / Python / PowerShell — 4 task types
+- ✅ DataX / Shell / Python / PowerShell — 4 task types (script types are admin-only, see below)
 - ✅ Executor CPU / Memory / Load real-time monitoring
 
 ### 🔒 Security Hardening (XinSync Exclusive)
-- ✅ **RPC Deserialization Protection** — Hessian whitelist serializer factory
-- ✅ **IDOR Protection** — 31 authorization seams with full coverage (centralized AccessControl)
-- ✅ **Command Injection Protection** — JobParamSafety dual-gate (persistence + execution)
-- ✅ **SQL Injection Protection** — SqlSafeIdentifier whitelist validation
-- ✅ **GLUE Script RCE Protection** — script-type tasks restricted to admin only
-- ✅ **Full-Chain Credential Masking** — API response masking / log sanitization / temp file 0600 permissions
-- ✅ **JWT Security** — secret via environment variable, no hardcoding
+- ✅ **RPC Deserialization Protection** — Hessian whitelist serializer factory + `accessToken` enforced on both sides
+- ✅ **IDOR Protection** — 33 authorization seams verified closed (single `AccessControl` implementation)
+- ✅ **Command Injection Protection** — `JobParamSafety` dual-gate (persistence + execution)
+- ✅ **SQL Injection Protection** — `SqlSafeIdentifier` whitelist for sort/filter identifiers
+- ✅ **GLUE Script RCE Protection** — everything except `BEAN` requires admin (including `GLUE_GROOVY`)
+- ✅ **Full-Chain Credential Masking** — API returns a fixed mask / job_json keeps datasource references only / logs and RPC exits mask at the source / temp files created 0600 with startup cleanup
+- ✅ **JWT Security** — secret comes from `${DATAX_JWT_SECRET}`, no hardcoded value
 - ✅ **Log4Shell Fix** — Log4j2 upgraded to 2.17.2
-- ✅ **Dependency Security Baseline** — Logback 1.2.13 / Fastjson 1.2.83 / Netty 4.1.100
+- ✅ **Dependency Security Baseline** — Logback 1.2.13 / Fastjson 1.2.83 / Netty 4.1.100.Final
 
 ### 🛡️ Automated Security Gate System
 
+**13 automated security gates** ship inside the repository, so any change — including a fresh clone — can be re-verified with one command:
+
 ```bash
-bash tools/fork-workflow.sh recheck
+bash devops/fork-workflow.sh recheck
 ```
 
 | Gate | Check |
 |------|-------|
-| `check_authz_seams.py` | 31 authorization seam closure verification |
-| `check_sql_identifiers.py` | SQL identifier whitelist |
-| `check_datasource_secret_scrub.py` | Data source credential masking |
-| `check_job_param_safety.sh` | Command injection parameter validation |
-| `check_admin_tests.sh` | Admin unit tests |
-| `check_ports.py` | Port configuration security |
-| `check_yaml.py` | YAML configuration compliance |
-| `check_tdsql.sh` | TDSQL DDL rewriting tests |
-| `check_executor_streams.py` | Executor stream processing |
+| `devops/checks/check_yaml.py` | Every `application.yml` parses, no duplicate keys |
+| `devops/checks/check_ports.py` | Port values consistent across yml / `bin/env.properties` / script fallback |
+| `devops/checks/check_authz_seams.py` | 33 authorization seams closed, plus the shape of the decision code itself |
+| `devops/checks/check_sql_identifiers.py` | Sort/filter identifiers go through the single `SqlSafeIdentifier` |
+| `devops/checks/check_executor_streams.py` | #487: both stdout/stderr reader threads start before `get()` |
+| `devops/checks/check_job_param_safety.sh` | Shell-metacharacter deny on job parameters (core + executor tests really run) |
+| `devops/checks/check_datasource_secret_scrub.py` | Datasource passwords never leave: read APIs mask, job_json carries references |
+| `devops/checks/check_log_secret_mask.sh` | Credentials masked at every toString/log exit; `SensitiveLogMask` is the only implementation |
+| `devops/checks/check_executor_tmpfile.sh` | Executor temp files created 0600; startup cleanup has hook, threshold and escape hatch |
+| `devops/checks/check_doc_secrets.py` | No copy-pasteable secret literals or maintainer-local paths in public docs |
+| `devops/checks/check_doc_commands.py` | Every copy-pasteable command in the docs points at a path that exists in this repo |
+| `devops/checks/check_admin_tests.sh` | Admin regression tests really run (rejects `Tests run: 0` fake green) |
+| `devops/checks/check_tdsql.sh` | TDSQL DDL rewriting tests really run |
+
+> Gate judging is deliberately strict: the Maven-backed gates require a positive `Tests run` with
+> `Failures: 0, Errors: 0, Skipped: 0`; the static gates come with falsification records
+> (break the guard → the gate must go red → restore → green). See `docs/devlog.md`.
 
 ---
 
@@ -146,13 +160,13 @@ bash tools/fork-workflow.sh recheck
 
 ### Prerequisites
 
-| Component | Version |
-|-----------|---------|
-| JDK | 1.8.201+ |
-| Maven | 3.6+ |
-| MySQL | 5.7+ |
-| Python | 2.7 / 3.x |
-| DataX | Installed ([Download DataX](https://github.com/alibaba/DataX)) |
+| Component | Version | Notes |
+|-----------|---------|-------|
+| JDK | 1.8 | this fork is compiled and verified on JDK 8 |
+| Maven | 3.6+ | |
+| MySQL | 5.7+ | admin database; driver is `com.mysql.cj.jdbc.Driver` |
+| Python | 2.7 / 3.x | required by the executor to launch `datax.py` |
+| DataX | must be installed | executor locates `datax.py` via `DATAX_HOME` or `datax.pypath` |
 
 ### 1. Clone
 
@@ -163,60 +177,125 @@ cd xinsync
 
 ### 2. Initialize Database
 
+`bin/db/datax_web.sql` creates tables only — **it contains no `CREATE DATABASE`**, so create the schema first (the name must match `DB_DATABASE`):
+
 ```bash
-mysql -u root -p < doc/db/datax_web.sql
+mysql -u root -p -e "CREATE DATABASE IF NOT EXISTS dataxweb DEFAULT CHARACTER SET utf8mb4;"
+mysql -u root -p dataxweb < bin/db/datax_web.sql
 ```
+
+The initial account is `admin` / `123456` (the password column stores a BCrypt hash; that is the only shipped plaintext password).
+
+> ⚠️ **Change the admin password immediately after the first login.**
 
 ### 3. Configure
 
-Edit `datax-admin/src/main/resources/application.yml`:
+Configuration is driven by environment variables; `application.yml` ships `${DB_HOST:127.0.0.1}` style "variable + factory default" values:
 
-```yaml
-spring:
-  datasource:
-    url: jdbc:mysql://localhost:3306/datax_web?useUnicode=true&characterEncoding=UTF-8
-    username: your_username
-    password: your_password
+```bash
+# admin database connection
+export DB_HOST=127.0.0.1
+export DB_PORT=3306
+export DB_DATABASE=dataxweb
+export DB_USERNAME=your_username
+export DB_PASSWORD=your_password
 
-# JWT secret (MUST change — never use default!)
-jwt:
-  secret: ${JWT_SECRET:your-random-secret-here}
+# three security secrets: generate your own, never reuse an example value
+export DATAX_JWT_SECRET="$(openssl rand -base64 32)"   # JWT signing key
+export DATAX_AES_KEY="$(openssl rand -hex 16)"         # datasource password encryption key; replace the factory default
+export DATAX_ACCESS_TOKEN="$(openssl rand -hex 16)"    # admin<->executor RPC channel token, required on both sides
 ```
+
+> Never commit secret literals, and never paste them into public docs or issues.
 
 ### 4. Build
 
+**Use `install`, not `package`** — the deployable assemblies are bound to the `install` phase:
+
 ```bash
-mvn clean package -Dmaven.test.skip=true
+mvn -B clean install -DskipTests
 ```
+
+Produced artifacts (paths verified):
+
+```
+packages/datax-admin_2.1.2_1.tar.gz        # admin: bin/ + conf/ + lib/
+packages/datax-executor_2.1.2_1.tar.gz     # executor: bin/ + conf/ + lib/
+build/datax-web-2.1.2.tar.gz               # combined package (datax-assembly)
+```
+
+> `datax-admin/target/*.jar` is a **thin jar without `Main-Class` in its MANIFEST** (this fork does not build a
+> Spring Boot fat jar), so `java -jar` failing is by design, not an environment problem. Always start from the
+> `bin/*.sh` scripts inside the tar package.
 
 ### 5. Run
 
 ```bash
-# Start Admin
-java -jar datax-admin/target/datax-admin-*.jar
+# both archives have no top-level directory, so extract each into its own folder
+mkdir -p /opt/datax-web/admin /opt/datax-web/executor
+tar -zxf packages/datax-admin_2.1.2_1.tar.gz   -C /opt/datax-web/admin
+tar -zxf packages/datax-executor_2.1.2_1.tar.gz -C /opt/datax-web/executor
 
-# Start Executor
-java -jar datax-executor/target/datax-executor-*.jar
+# admin (web port 9527)
+cd /opt/datax-web/admin
+bash bin/datax-admin.sh start
+
+# executor (web port 9504, RPC port 9999; needs to know where DataX lives)
+cd /opt/datax-web/executor
+export DATAX_HOME=/opt/datax        # must contain bin/datax.py
+bash bin/datax-executor.sh start
 ```
+
+Default ports come from each package's `bin/env.properties` (`SERVER_PORT` / `EXECUTOR_PORT`) — change them there
+rather than passing `--server.port` on the command line. A successful start shows these three lines:
+
+```
+Tomcat started on port(s): 9527
+Tomcat started on port(s): 9504
+NettyHttpServer, port = 9999
+```
+
+`bin/datax-admin.sh` and `bin/datax-executor.sh` support `start | stop | restart | status`.
 
 ### 6. Access Web UI
 
-Open `http://localhost:9527` — Default: `admin` / `123456`
-
-> ⚠️ **Change admin password immediately after first login!**
+Open `http://localhost:9527` — default account: `admin` / `123456`
 
 ### Docker
 
+This repository ships **no Dockerfile and no docker-compose file**, so there is no one-command container deployment.
+Containers are used here as a **build and verification environment** (`maven:3.8-openjdk-8`), for example to re-run a gate:
+
 ```bash
-cd build/docker
-docker-compose up -d
+docker run --rm -v "$(pwd)":/work -v datax-m2:/root/.m2 -w /work \
+  maven:3.8-openjdk-8 bash /work/devops/checks/check_admin_tests.sh
 ```
+
+If you need real containerized deployment, please add a `Dockerfile` and open a PR.
+
+Detailed deployment guide (with measured evidence and pitfall comparison): [deployment doc](doc/datax-web/datax-web-deploy-V2.1.2.md)
+
+---
+
+## 📊 Domestic Database (Xinchuang) Support
+
+| Database | Status | Notes |
+|----------|--------|-------|
+| **TDSQL** (Tencent Cloud) | ⚠️ Seam + rules landed | datasource type / metadata / reader-writer wired, DDL rewriting unit-tested; **sharding orchestration and real-cluster acceptance still pending an instance** |
+| **MySQL derivatives** | ✅ Supported | reuses `MySQLQueryTool` over the MySQL protocol |
+| **PostgreSQL derivatives** | ✅ Supported | metadata queries corrected |
+| **Hive (incl. Kerberos)** | ✅ Supported | JDBC connection and `connectionTestQuery` hardened for HiveServer2 |
+| **Oracle → domestic DB** | ⚠️ Needs real instance | `all_*` view rewrites done, **not verified against a live Oracle** |
 
 ---
 
 ## 📋 Changelog
 
 See [CHANGELOG.md](CHANGELOG.md) for full details.
+
+- 🔴 CRITICAL x 5: RPC deserialization RCE, IDOR, command injection, Log4Shell, GLUE script RCE
+- 🟠 HIGH x 6: SQL injection, XSS, credential leakage (API / job_json / logs & RPC / temp files), hardcoded JWT secret
+- 🟡 MEDIUM x 2: logging component versions, dependency versions locked globally
 
 ---
 
@@ -240,10 +319,14 @@ If XinSync helps you, consider supporting the project!
 ## 🤝 Contributing
 
 1. Fork this repository
-2. Create your feature branch: `git checkout -b feature/your-feature`
+2. Create your feature branch: `git checkout -b feature/your-branch`
 3. Commit your changes: `git commit -m 'feat: add your feature'`
-4. Push to the branch: `git push origin feature/your-feature`
+4. Push to the branch: `git push origin feature/your-branch`
 5. Open a Pull Request
+
+**When you touch security-relevant code, do two more things**: put the decision in the single implementation point
+(`AccessControl` / `JobParamSafety` / `SensitiveLogMask` / `SqlSafeIdentifier` / `PrivateTmpFiles`), and register the
+new seam or rule in `devops/checks/`. Then run `bash devops/fork-workflow.sh recheck` and make sure it is green.
 
 ---
 

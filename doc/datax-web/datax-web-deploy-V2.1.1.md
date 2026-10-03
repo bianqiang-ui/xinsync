@@ -313,7 +313,9 @@ datax:
 
   jar包需要用命令启用以后才能执行，此次选用nohup命令，保障程序可以在后台运行，即使关闭控制台后，程序依然可以安全运行。
 
-  ```
+（**以下两条命令在当前版本已失效，勿照抄**：瘦 jar 没有 `Main-Class`，`java -jar` 会报“没有主清单属性”。正确启动方式见 [datax-web-deploy-V2.1.2.md](datax-web-deploy-V2.1.2.md) 第 3 节：`mvn install` 出 tar 包 + `bin/datax-admin.sh` 启动。原文按上游原貌保留。）
+
+```text
 nohup java -Xmx1024M -Xms1024M -Xmn448M -XX:MaxMetaspaceSize=192M -XX:MetaspaceSize=192M -jar datax-admin-2.1.1.jar --server.port=9999&
 
 nohup java -Xmx1024M -Xms1024M -Xmn448M -XX:MaxMetaspaceSize=192M -XX:MetaspaceSize=192M -jar datax-executor-2.1.1.jar --server.port=6888&

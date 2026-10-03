@@ -9,7 +9,7 @@
 #   bash devops/fork-workflow.sh recheck     # 自动发现并复跑 devops/checks 下全部 check_* 门禁 + shell 语法
 #                                           # 加速：SKIP_MVN_GATES=1 只跑配置/语法类门禁，结果是 PARTIAL 且退出码非 0；
 #                                           #       只想快速过一遍语法时再叠加 GATE_ALLOW_PARTIAL=1 才返回 0
-#                                           # 门禁数量下限：MIN_GATES=N（默认 12），发现数不足直接 FAIL
+#                                           # 门禁数量下限：MIN_GATES=N（默认 13），发现数不足直接 FAIL
 #
 # 从外层工作台 tools/fork-workflow.sh 搬进仓库（2026-10-03，#38）。搬进来的理由不是"顺手整理目录"：
 # README 与 docs/ 里对外写着 `bash tools/fork-workflow.sh recheck`，而 tools/ 在仓库外 ——
@@ -133,12 +133,12 @@ cmd_recheck() {
   #      （上一版 ls 用 glob 过滤，check_authz_seams.bak 这种文件会直接消失）；
   #      __pycache__ 里的 .pyc 是 python 自动产物，同名的 .py 已被扫到，这里显式排除；
   #   3) 门禁数量下限 MIN_GATES：devops/checks 被误删/改名时，"发现 0 个" 不该是好消息。
-  #      下限跟着实际门禁数走（当前 12 条）：**加一条门禁必须同时把这里抬上去**，
+  #      下限跟着实际门禁数走（当前 13 条）：**加一条门禁必须同时把这里抬上去**，
   #      否则"新增 9 条、被人无声删掉 3 条"依旧能报全绿。下限写在代码里而不是文档里，
   #      是为了让漏改在 recheck 当场变红灯，而不是等下一轮复核才发现。
   local -a gates=()
   local g name rc
-  local min_gates="${MIN_GATES:-12}"
+  local min_gates="${MIN_GATES:-13}"
   while IFS= read -r g; do
     [ -n "$g" ] || continue
     case "$g" in
@@ -236,6 +236,11 @@ cmd_recheck() {
   # 上一版还要在这里额外补一句外层 tools/fork-workflow.sh，因为那个脚本在仓库外、find 扫不到；
   # 现在脚本本体已经搬进 devops/，仓库内的 find 自动覆盖它，多余的补行删掉（免得同一文件查两遍、
   # 计数虚高一倍，把"一个 .sh 都没匹配到"那条下限检查也一起骗过去）。
+  # 计数按**仓库内**口径排除 `tmp/`（草稿与反证用的整树沙箱都住在那儿）：
+  # 实测上一版把工作树整个扫了一遍，16 个真实脚本 + 沙箱副本 = 汇总行报"62 个 shell 脚本"，
+  # 数字随沙箱增减而漂（同一轮里 46→62），而且沙箱是"故意改坏"的地方 ——
+  # 扫它会把一次正常的反证读成 recheck 变红，把真正的防线和沙箱搅成一锅。
+  # `*/.git/*` 一并排掉：hook 样例不是交付物。
   local sh_checked=0 sh_fail=0 f
   while IFS= read -r f; do
     [ -f "$f" ] || continue
@@ -246,7 +251,7 @@ cmd_recheck() {
       sh_fail=1
     fi
     sh_checked=$((sh_checked + 1))
-  done < <(find "$REPO" -name '*.sh' -not -path '*/target/*' 2>/dev/null | sort)
+  done < <(find "$REPO" -name '*.sh' -not -path '*/target/*' -not -path '*/tmp/*' -not -path '*/.git/*' 2>/dev/null | sort)
   if [ "$sh_checked" -eq 0 ]; then
     echo "[FAIL] 一个 .sh 都没匹配到，门禁等于没跑"
     fail=1
