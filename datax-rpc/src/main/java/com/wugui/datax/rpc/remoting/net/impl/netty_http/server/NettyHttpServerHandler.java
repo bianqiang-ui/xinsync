@@ -4,6 +4,7 @@ import com.wugui.datax.rpc.remoting.net.params.Beat;
 import com.wugui.datax.rpc.remoting.net.params.XxlRpcRequest;
 import com.wugui.datax.rpc.remoting.net.params.XxlRpcResponse;
 import com.wugui.datax.rpc.remoting.provider.XxlRpcProviderFactory;
+import com.wugui.datax.rpc.util.RpcAccessDecision;
 import com.wugui.datax.rpc.util.ThrowableUtil;
 import com.wugui.datax.rpc.util.XxlRpcException;
 import io.netty.buffer.ByteBufUtil;
@@ -42,20 +43,31 @@ public class NettyHttpServerHandler extends SimpleChannelInboundHandler<FullHttp
         final byte[] requestBytes = ByteBufUtil.getBytes(msg.content());    // byteBuf.toString(io.netty.util.CharsetUtil.UTF_8);
         final String uri = msg.uri();
         final boolean keepAlive = HttpUtil.isKeepAlive(msg);
+        final String listingToken = msg.headers().get(RpcAccessDecision.SERVICE_LISTING_HEADER);
 
         // do invoke
         serverHandlerPool.execute(new Runnable() {
             @Override
             public void run() {
-                process(ctx, uri, requestBytes, keepAlive);
+                process(ctx, uri, requestBytes, keepAlive, listingToken);
             }
         });
     }
 
-    private void process(ChannelHandlerContext ctx, String uri, byte[] requestBytes, boolean keepAlive){
+    private void process(ChannelHandlerContext ctx, String uri, byte[] requestBytes, boolean keepAlive,
+                         String listingToken){
         String requestId = null;
         try {
             if ("/services".equals(uri)) {	// services mapping
+
+                // 先判定再拼清单：未授权时一个服务名都不许出去
+                String denyReason = xxlRpcProviderFactory.serviceListingDenyReason(listingToken);
+                if (denyReason != null) {
+                    logger.warn(">>>>>>>>>>> xxl-rpc provider /services denied (anonymous or wrong token).");
+                    byte[] denyBytes = denyReason.getBytes("UTF-8");
+                    writeResponse(ctx, keepAlive, HttpResponseStatus.FORBIDDEN, denyBytes);
+                    return;
+                }
 
                 // request
                 StringBuffer stringBuffer = new StringBuffer("<ui>");
@@ -68,7 +80,7 @@ public class NettyHttpServerHandler extends SimpleChannelInboundHandler<FullHttp
                 byte[] responseBytes = stringBuffer.toString().getBytes("UTF-8");
 
                 // response-write
-                writeResponse(ctx, keepAlive, responseBytes);
+                writeResponse(ctx, keepAlive, HttpResponseStatus.OK, responseBytes);
 
             } else {
 
@@ -94,7 +106,7 @@ public class NettyHttpServerHandler extends SimpleChannelInboundHandler<FullHttp
                 byte[] responseBytes = xxlRpcProviderFactory.getSerializerInstance().serialize(xxlRpcResponse);
 
                 // response-write
-                writeResponse(ctx, keepAlive, responseBytes);
+                writeResponse(ctx, keepAlive, HttpResponseStatus.OK, responseBytes);
             }
         } catch (Exception e) {
             logger.error(e.getMessage(), e);
@@ -108,7 +120,7 @@ public class NettyHttpServerHandler extends SimpleChannelInboundHandler<FullHttp
             byte[] responseBytes = xxlRpcProviderFactory.getSerializerInstance().serialize(xxlRpcResponse);
 
             // response-write
-            writeResponse(ctx, keepAlive, responseBytes);
+            writeResponse(ctx, keepAlive, HttpResponseStatus.OK, responseBytes);
         }
 
     }
@@ -116,8 +128,8 @@ public class NettyHttpServerHandler extends SimpleChannelInboundHandler<FullHttp
     /**
      * write response
      */
-    private void writeResponse(ChannelHandlerContext ctx, boolean keepAlive, byte[] responseBytes){
-        FullHttpResponse response = new DefaultFullHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.OK, Unpooled.wrappedBuffer(responseBytes));
+    private void writeResponse(ChannelHandlerContext ctx, boolean keepAlive, HttpResponseStatus status, byte[] responseBytes){
+        FullHttpResponse response = new DefaultFullHttpResponse(HttpVersion.HTTP_1_1, status, Unpooled.wrappedBuffer(responseBytes));
         response.headers().set(HttpHeaderNames.CONTENT_TYPE, "text/html;charset=UTF-8");       // HttpHeaderValues.TEXT_PLAIN.toString()
         response.headers().set(HttpHeaderNames.CONTENT_LENGTH, response.content().readableBytes());
         if (keepAlive) {

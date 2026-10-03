@@ -28,7 +28,7 @@
 > - 🔒 修复 **15 项安全漏洞**（含 5 项 CRITICAL）：RPC 反序列化 RCE、越权（IDOR）、命令注入、Log4Shell、GLUE 脚本 RCE 等
 > - 🛡️ **33 条授权接缝** 逐条闭环判定（`AccessControl` 单点实现），从"只有登录判定"到"角色 + 归属双层"
 > - ✅ 收口 **社区长期悬而未决的 Issue**：#487 进程树残留、#296 Hive 连接、#389 定时任务不触发、#265 HBase 数据源等
-> - 🏗️ 内置 **14 道自动化质量门禁**，任何改动都能一键复跑验证（见下文"质量门禁"）
+> - 🏗️ 内置 **15 道自动化质量门禁**，任何改动都能一键复跑验证（见下文"质量门禁"）
 > - 📝 每批改动的实测证据与反证记录写在 **CHANGELOG** 与对应的提交说明里（逐轮开发台账与技术手册属过程文档，不随仓库外发）
 >
 > **原版是一把好刀，我们给它淬了火、开了刃、配了鞘。**
@@ -43,7 +43,7 @@
 | **口令保护** | API 返回明文/密文口令 | 全链路脱敏：API 掩码 / job_json 只写引用 / 日志与 RPC 出口遮蔽 / 临时文件创建即 0600 |
 | **依赖安全** | Log4j2 2.11.2、Logback 1.2.3 等 | Log4j2 2.17.2 / Logback 1.2.13 / Fastjson 1.2.83 / Netty 4.1.100.Final 全局锁定 |
 | **信创适配** | 无 | TDSQL 数据源接缝 + DDL 自动改写（分片键/主键/索引） |
-| **质量门禁** | 无 | 14 道可复跑门禁 + 全仓库 shell 语法检查 |
+| **质量门禁** | 无 | 15 道可复跑门禁 + 全仓库 shell 语法检查 |
 
 ---
 
@@ -137,7 +137,7 @@ graph TB
 
 ### 🛡️ 质量门禁系统
 
-项目内置 **14 道自动化质量门禁**，全部随仓库交付，任何改动都能一键复跑：
+项目内置 **15 道自动化质量门禁**，全部随仓库交付，任何改动都能一键复跑：
 
 ```bash
 bash devops/fork-workflow.sh recheck
@@ -153,6 +153,7 @@ bash devops/fork-workflow.sh recheck
 | `devops/checks/check_job_param_safety.sh` | 作业参数 shell 注入（core + executor 两模块单测真跑） |
 | `devops/checks/check_datasource_secret_scrub.py` | 数据源口令"只进不出"：读接口回掩码、向导产物不含口令 |
 | `devops/checks/check_log_secret_mask.sh` | 凭据出口遮蔽：四个出口 + `SensitiveLogMask` 唯一实现处 + 单测真跑 |
+| `devops/checks/check_rpc_access.sh` | RPC 服务端令牌判定单点：服务调用与 `/services` 服务清单两条入口都先判定后放行（未授权回 403 且不外泄服务表） |
 | `devops/checks/check_executor_tmpfile.sh` | 执行器临时文件创建即 0600、启动清理有钩子有阈值有逃生口 |
 | `devops/checks/check_package_deps.sh` | 读**产出的部署包**核对依赖版本（netty/log4j2/logback 与根 pom 的 pin 一致，EOL 残留按台账逐条对上） |
 | `devops/checks/check_doc_secrets.py` | 对外文档不得出现可照抄的密钥字面值与维护者本机路径 |

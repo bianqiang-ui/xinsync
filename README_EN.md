@@ -32,7 +32,7 @@ The upstream project stopped being maintained in June 2024 with 180+ open issues
 > - 🔒 Fixed **15 security vulnerabilities** (5 of them CRITICAL) — RPC deserialization RCE, IDOR, command injection, Log4Shell, GLUE script RCE
 > - 🛡️ **33 authorization seams** verified one by one by a gate script (single `AccessControl` implementation, ownership always read back from the DB row)
 > - ✅ Long-standing community issues closed: #487 orphan process tree, #296 Hive connection, #389 scheduler stalls, #265 HBase datasource, and more
-> - 🏗️ **14 automated security gates** — one command to re-run everything, zero silent regression
+> - 🏗️ **15 automated security gates** — one command to re-run everything, zero silent regression
 > - 📝 Every batch ships with measured evidence and falsification records, written into the **CHANGELOG**
 >   and the corresponding commit messages (the round-by-round working ledger and technical manual are
 >   process documents and are not published with the repository)
@@ -101,7 +101,7 @@ graph TB
 | **Credential Protection** | API returns credential material | Full chain: API mask / job_json stores references only / logs and RPC exits masked / temp files created 0600 |
 | **Dependency Safety** | Log4j2 2.11.2, Logback 1.2.3, … | Log4j2 2.17.2 / Logback 1.2.13 / Fastjson 1.2.83 / Netty 4.1.100.Final locked in the root POM |
 | **Domestic DB Support** | None | TDSQL datasource seam + DDL rewriting (shardkey / primary key / indexes) |
-| **Quality Gates** | None | 14 automated security gates, reproducible verification |
+| **Quality Gates** | None | 15 automated security gates, reproducible verification |
 
 ---
 
@@ -136,7 +136,7 @@ graph TB
 
 ### 🛡️ Automated Security Gate System
 
-**14 automated security gates** ship inside the repository, so any change — including a fresh clone — can be re-verified with one command:
+**15 automated security gates** ship inside the repository, so any change — including a fresh clone — can be re-verified with one command:
 
 ```bash
 bash devops/fork-workflow.sh recheck
@@ -152,6 +152,7 @@ bash devops/fork-workflow.sh recheck
 | `devops/checks/check_job_param_safety.sh` | Shell-metacharacter deny on job parameters (core + executor tests really run) |
 | `devops/checks/check_datasource_secret_scrub.py` | Datasource passwords never leave: read APIs mask, job_json carries references |
 | `devops/checks/check_log_secret_mask.sh` | Credentials masked at every toString/log exit; `SensitiveLogMask` is the only implementation |
+| `devops/checks/check_rpc_access.sh` | Single RPC-server token decision; both entry points (service invoke and the `/services` map) are authorized first — unauthorized gets 403 with no service names |
 | `devops/checks/check_executor_tmpfile.sh` | Executor temp files created 0600; startup cleanup has hook, threshold and escape hatch |
 | `devops/checks/check_package_deps.sh` | Reads the **built deployment packages** and pins the shipped jar versions against the root pom (netty family, log4j2, logback; EOL leftovers reconciled against a per-package ledger) |
 | `devops/checks/check_doc_secrets.py` | No copy-pasteable secret literals or maintainer-local paths in public docs |

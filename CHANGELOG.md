@@ -142,10 +142,10 @@
 
 ### 🏗️ 基础设施
 
-- **14 道自动化质量门禁**（`devops/checks/`，随仓库交付，clone 后可直接复跑）：
+- **15 道自动化质量门禁**（`devops/checks/`，随仓库交付，clone 后可直接复跑）：
   `check_yaml.py`、`check_ports.py`、`check_executor_streams.py`、`check_authz_seams.py`、
   `check_sql_identifiers.py`、`check_job_param_safety.sh`、`check_datasource_secret_scrub.py`、
-  `check_log_secret_mask.sh`、`check_executor_tmpfile.sh`、`check_doc_secrets.py`、
+  `check_log_secret_mask.sh`、`check_rpc_access.sh`、`check_executor_tmpfile.sh`、`check_doc_secrets.py`、
   `check_doc_commands.py`（十条规则，含“交付文档的表格行必须同一行闭合”“对外改动数字必须按锚点与 git 实测一致”）、`check_package_deps.sh`、`check_admin_tests.sh`、`check_tdsql.sh`
 - **统一入口搬进仓库**：`bash devops/fork-workflow.sh recheck`（此前 README 指的 `tools/fork-workflow.sh`
   在工作台目录里，clone 下来不存在 —— 是一张空头支票，现已由 `check_doc_commands.py` 反向钉住）
@@ -159,8 +159,8 @@
 - 门禁判据的三条元规则：发现方式是递归 `find`（glob 静默失配会假绿）、数量下限 `MIN_GATES` 等于实际条数
   （删门禁必须当场红灯）、`SKIP_MVN_GATES` 的结果是 PARTIAL 且退出码非 0（部分复跑不得冒充全绿）
 - Shell 脚本统一 LF 换行符（`.gitattributes` 强制）
-- 44 个测试类；管理端回归 101 条用例，core/executor/tdsql/临时文件/遮蔽各条链路都有行为用例
-- 门禁入口随仓库交付：`bash devops/fork-workflow.sh recheck` 一条命令复跑全部 14 道门禁
+- 44 个测试类；管理端回归 101 条用例，core/executor/tdsql/临时文件/遮蔽/RPC 令牌各条链路都有行为用例
+- 门禁入口随仓库交付：`bash devops/fork-workflow.sh recheck` 一条命令复跑全部 15 道门禁
 - Docker 镜像 `maven:3.8-openjdk-8` 仅用作**构建与验证环境**（本仓库不提供 Dockerfile / docker-compose，
   README 里原来的 "Docker 部署" 步骤照做必失败，已删除并如实说明）
 - Assembly 打包输出 `packages/datax-admin_2.1.2_1.tar.gz`、`packages/datax-executor_2.1.2_1.tar.gz`、
@@ -190,6 +190,29 @@
   并由第 13 道门禁新增的**第 10 条规则**现场跑 git 重量（改错数字、锚点不存在、声明被整体删光、
   git 解析不到仓库，四种情况都会红灯）。`devops/fork-workflow.sh diff` 同步改为：
   本地没有台账分支时退回公开 tag 并打印口径提示，陌生 clone 里不再报"先执行 baseline 子命令"。
+
+### 🔐 批次12（10-B）— 2026-10-04 执行器 RPC 端口的两条入口收口
+
+执行器在 9999 端口上跑的是 netty_http，它有**两条**入口，而历史上只有第一条过令牌：
+
+- **`/services` 匿名可读**（已证实，不是推测）：`NettyHttpServerHandler` 在 `"/services".equals(uri)` 分支里
+  直接把 `getServiceData()` 整张表拼进响应，**判定一行都没有** —— 匿名 GET 就拿到"这台执行器暴露哪些 RPC 接口、
+  由哪个 Bean 实现"，是一张现成的攻击面地图。它不在 Spring 过滤器链上，管理端那 33 条授权接缝门禁一条都管不到它。
+  修法：**先判定、后拼清单**；未授权回 `403` 且响应体里一个服务名都不出现。令牌走请求头
+  `X-Xxl-Rpc-Access-Token`，**不走 URL 查询参数**（进 query 就会落进 nginx / 代理 / 浏览器历史，
+  而这条接口本来就是给人 `curl` 排查用的）。
+- **判定收到唯一实现处** `datax-rpc/.../util/RpcAccessDecision.java`：`invokeService` 与 `/services` 都委托它，
+  工厂里那份内联的 `accessToken.trim().equals(...)` 三段式已回收（同一常量在两处各写一遍，是本项目反复吃过的那种漂移）。
+  拒绝措辞沿用历史值，`datax.rpc.allowEmptyAccessToken` 逃生口的语义与默认值（false）都不动 ——
+  旧部署显式打开它时清单照旧可得，守卫不替运维改部署语义。
+- **第 15 道门禁 `devops/checks/check_rpc_access.sh`**：形状侧钉"只有一份判定 / 两条入口都委托 /
+  判定行必须早于拼清单的行 / 纯 netty 通道不得自己读服务表"；行为侧 `RpcAccessDecisionTest` 5 条 +
+  `ServiceListingAccessTest` 5 条（用 `EmbeddedChannel` 喂真 `FullHttpRequest`、读真出向响应，
+  断言状态码与响应体内容，不看代码里有没有那行 `if`）。`MIN_GATES` 同步 14→15，测试类 42→44
+  （口径当场量：`find <各模块>/src/test/java -name '*Test.java' | wc -l` = 44，admin 34 / core 6 / executor 2 / rpc 2；
+  不计 1 个 `*Tests.java` 与 4 个放在测试目录里的工具类）。
+- **顺序判据为什么单独写**：只 grep"判定和拼清单两处都存在"是假绿通道 —— 把判定挪到拼完清单之后再 `return`，
+  泄漏照旧发生，两条 grep 依然全绿。所以门禁比的是**行号先后**。
 
 ### 📊 统计（相对上游 v2.1.2 发布点 tag `v-2.1.2`，对账锚点 `67c1004`，实测值）
 

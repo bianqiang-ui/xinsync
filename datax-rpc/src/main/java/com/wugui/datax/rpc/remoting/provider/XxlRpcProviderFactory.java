@@ -10,6 +10,7 @@ import com.wugui.datax.rpc.serialize.Serializer;
 import com.wugui.datax.rpc.serialize.impl.HessianSerializer;
 import com.wugui.datax.rpc.util.IpUtil;
 import com.wugui.datax.rpc.util.NetUtil;
+import com.wugui.datax.rpc.util.RpcAccessDecision;
 import com.wugui.datax.rpc.util.ThrowableUtil;
 import com.wugui.datax.rpc.util.XxlRpcException;
 import org.slf4j.Logger;
@@ -177,6 +178,18 @@ public class XxlRpcProviderFactory {
 	}
 
 	/**
+	 * `/services` 服务清单的受理判定。**必须与 {@link #invokeService} 用同一份判定**：
+	 * 清单里是"这台执行器暴露了哪些 RPC 接口、由哪个 Bean 实现"，等于一张现成的攻击面地图，
+	 * 历史版本把它挂在令牌校验之外，匿名 GET 就能读走。
+	 *
+	 * @param presentedAccessToken 请求头 {@link RpcAccessDecision#SERVICE_LISTING_HEADER} 的值，可为 null
+	 * @return null 表示放行；否则为拒绝理由
+	 */
+	public String serviceListingDenyReason(String presentedAccessToken) {
+		return RpcAccessDecision.denyReason(accessToken, allowEmptyAccessToken, presentedAccessToken);
+	}
+
+	/**
 	 * make service key
 	 *
 	 * @param iface
@@ -231,14 +244,10 @@ public class XxlRpcProviderFactory {
 			xxlRpcResponse.setErrorMsg("The timestamp difference between admin and executor exceeds the limit.");
 			return xxlRpcResponse;
 		}
-		if (accessToken == null || accessToken.trim().length() == 0) {
-			// 默认拒绝：未配置令牌时 9999 端口不应成为匿名执行入口（CVE-2022-46478）
-			if (!allowEmptyAccessToken) {
-				xxlRpcResponse.setErrorMsg("The access token is not configured on provider side.");
-				return xxlRpcResponse;
-			}
-		} else if (!accessToken.trim().equals(xxlRpcRequest.getAccessToken())) {
-			xxlRpcResponse.setErrorMsg("The access token is wrong.");
+		String denyReason = RpcAccessDecision.denyReason(accessToken, allowEmptyAccessToken,
+				xxlRpcRequest.getAccessToken());
+		if (denyReason != null) {
+			xxlRpcResponse.setErrorMsg(denyReason);
 			return xxlRpcResponse;
 		}
 
