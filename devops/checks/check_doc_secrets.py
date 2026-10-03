@@ -20,9 +20,10 @@ r"""门禁：对外文档里不得出现"可直接抄用的密钥字面值"，�
 上游老文档里带着 `/Users/xxx`、`/home/xxx` 这类示例路径，一上来就把全仓库扫成红灯的门禁
 只会被下一次构建忽略掉 —— 门禁必须今天就能绿，才谈得上守住明天。
 
-两条规则的覆盖面不同，这是刻意的：
+两条规则的覆盖面（README*、doc/XinSync-* 两份清单现在内容相同，是台账移出仓库之后收敛成的同一批文件；
+`if path in howto` 那道过滤保留着，将来若再纳入"只存档不照做"的文档，它仍然起作用）：
   - 密钥字面值：所有对外文档一起扫；
-  - 本机路径：只扫**照做类**文档（README、部署/启动指南）。
+  - 本机路径：只扫**照做类**文档（读者会一行行复制的那批）。
 """
 import io
 import re
@@ -109,7 +110,7 @@ def check_local_paths(text, rel, findings):
 def main():
     docs = [p for p in doc_files() if p.is_file()]
     if not docs:
-        sys.stdout.write("FAIL: 一个对外文档都没扫到（README*/docs//doc/XinSync-*），门禁本身失效\n")
+        sys.stdout.write("FAIL: 一个对外文档都没扫到（README*、doc/XinSync-*），门禁本身失效\n")
         return 1
 
     findings = []
@@ -118,8 +119,8 @@ def main():
         rel = path.relative_to(ROOT).as_posix()
         text = io.open(str(path), encoding="utf-8", errors="replace").read()
         check_secret_literals(text, rel, findings)
-        # docs/ 下的开发日志与手册里出现的绝对路径是"这份记录产生于哪台机器"的出处信息，
-        # 抹掉它会让证据变得不具体；只有读者会照着敲的文档才要求路径可移植。
+        # 逐轮台账与技术手册是过程文档，不随仓库外发（.gitignore 已排除 docs/），因此不在扫描范围内；
+        # 那里出现的工作副本路径是"这份记录产生于哪台机器"的出处信息，抹掉它会让证据变得不具体。
         if path in howto:
             check_local_paths(text, rel, findings)
 
@@ -129,7 +130,10 @@ def main():
             sys.stdout.write("FAIL: %s\n" % item)
         sys.stdout.write("\n共 %d 条：密钥字面值与本机路径都不允许出现在对外文档里\n" % len(findings))
         return 1
-    sys.stdout.write("PASS: 对外文档无可用密钥字面值、无本机路径（%d 份）\n" % len(docs))
+    sys.stdout.write(
+        "PASS: 对外文档 %d 份，没有可直接抄用的密钥字面值；照做类文档也没有 LOCAL_PATH_RES "
+        "登记的那几类本机路径（仓库开发目录、维护者用户目录）—— 口径以本文件规则列表为准，"
+        "不是「凡绝对路径都拦」\n" % len(docs))
     return 0
 
 

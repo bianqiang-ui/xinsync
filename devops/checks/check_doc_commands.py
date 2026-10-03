@@ -54,9 +54,14 @@ README 里"9 个自动化安全检查""9 道门禁"这类声明就是靠人记�
 范围与命令扫描**不同**：命令扫描只动对外照做类文档，因为那里的命令是"当时实测"的历史记录；
 表格语法不是事实而是**装订**，把断行接回去不改变任何一句陈述的内容，所以台账一起查。
 围栏内的行一律跳过 —— 文档里的 mermaid 边标签、ASCII 样例都有以 `|` 开头的行，那是图不是表。
+
+第 10 条：对外"改动了多少"这组数字（提交数 / 文件数 / 增删行数），门禁现场跑 `git` 按**锚点**重量一遍。
+同一个缺陷已经犯了三次，判据与量法见下面 `STATS_CLAIM_RES` 处的注释；一句话：
+数字只能相对于一个写死的 commit 成立，参照物写 `HEAD` 的那组数字必然被"携带它的提交"污染。
 """
 import io
 import re
+import subprocess
 import sys
 
 if hasattr(sys.stdout, "reconfigure"):
@@ -134,6 +139,167 @@ GATE_CLAIM_RES = (
 # 判据因此升级为**集合相等**：列了门禁表的文档，门禁集合必须与实际一一对应 ——
 # 少列 = 对外少报防线，多列 = 对外宣传了已经不存在的防线。
 GATE_TABLE_MIN_ROWS = 3
+
+# ---------------------------------------------------------------------------
+# 第 10 条：对外"改动了多少"这组数字，门禁必须现场跑 git 重量一遍。
+#
+# 为什么必须有这条：同一个缺陷已经犯了**三次**（实测对账，不是猜的）——
+#   ① README 长期写"9 个门禁"，实际 12 个（→ 第 5 条治的）；
+#   ② README 写"46 次提交 / 135 文件 / 14,800 行"、CHANGELOG 写"139 文件 / +15,468 行"，
+#      实测 `git diff --shortstat` 是 131 / +11,835 / −654 —— 两处数字**互不相同**且都不可复现；
+#   ③ 把数字改成"实测值"之后，只要参照物写的是 `HEAD`，这组数字在"携带它的那次提交"落地后
+#      立刻失真（自己算进自己），下一次谁照文档跑一遍就对不上。
+# 数字写在文档里就是"当时的快照"，快照必然过期；能过期的东西不能靠人记得改，只能靠机器每次重量。
+#
+# 判据（三条都是硬事实，不做容差）：
+#   a) 起点固定为公开 tag `v-2.1.2` —— 任何 clone 里都有，所以声明是"可复现"的而不是空头支票；
+#      维护者本地的台账分支 `upstream-baseline` 没随 fork 推送，用它当参照物的命令陌生人跑不出来。
+#   b) 终点必须是文档里写死的**锚点 sha**（不是 `HEAD`），且该 sha 必须真实存在、是 HEAD 的祖先；
+#      文档里出现多个不一致的锚点也算不合格。
+#   c) 锚点区间实测的 提交数/文件数/增删行数 必须与文档声明**逐字相等**。
+# 量不到就红灯：不是 git 仓库、锚点取不到、git 命令非 0 退出，一律 FAIL ——
+# "取不到就当通过"是本仓门禁已经犯过六次的自空洞毛病（见 memory: 守卫的不判定分支必须被反证）。
+# ---------------------------------------------------------------------------
+STATS_DOC_PATTERNS = ("README*.md", "CHANGELOG.md")
+STATS_REF = "v-2.1.2"
+OURS_AUTHOR = "bianqiang@gmail.com"
+# 锚点的书写形状：`对账锚点 `sha`` / ``anchor `sha``（反引号必须成对，避免正文里
+# 随口提到"锚点"两个字就被当成声明）。
+ANCHOR_RE = re.compile(r"(?:对账锚点|锚点|[Aa]nchor)\s+`([0-9a-f]{7,40})`")
+# (标签, 正则, 目标字段)。字段名与 measure_stats() 的键一致；两个字段一起声明的写法用元组。
+STATS_CLAIM_RES = (
+    ("自研提交数", re.compile(r"\*\*(\d{1,5})\s*个自研提交\*\*"), "ours"),
+    ("自研提交数", re.compile(r"\*\*(\d{1,5})\s+of\s+our\s+own\s+commits\*\*", re.I), "ours"),
+    ("自研提交数", re.compile(r"\*\*提交数\*\*：(\d{1,5})"), "ours"),
+    ("改动文件数", re.compile(r"\*\*(\d{1,5})\s*个文件\*\*"), "files"),
+    ("改动文件数", re.compile(r"\*\*(\d{1,5})\s+files\*\*", re.I), "files"),
+    ("改动文件数", re.compile(r"\*\*修改文件\*\*：(\d{1,5})"), "files"),
+    ("新增行数", re.compile(r"\*\*新增代码\*\*：\+([\d,]+)\s*行"), "ins"),
+    ("删除行数", re.compile(r"\*\*删除代码\*\*：[-−]([\d,]+)\s*行"), "dels"),
+    ("增删行数（合写）", re.compile(r"\+([\d,]{1,9})\s*/\s*[−-]([\d,]{1,9})\s*(?:行|lines)"),
+     ("ins", "dels")),
+    ("区间提交数", re.compile(r"共\s*(\d{1,5})\s*个提交，其中\s*(\d{1,5})\s*个是上游"),
+     ("total", "upstream")),
+)
+
+
+def _git(root, *args):
+    # encoding 必须写死 utf-8：Windows 宿主 python 默认按 cp936 解码子进程输出，
+    # 而本仓提交说明是中文 —— 不写就会在读取线程里 UnicodeDecodeError，
+    # 结果是 stdout=None，"量不到"被静默吞成 0（本仓门禁反复犯的那类自空洞）。
+    return subprocess.run(["git", "-C", str(root)] + list(args),
+                          stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                          universal_newlines=True, encoding="utf-8", errors="replace")
+
+
+def _num(tok):
+    return int(tok.replace(",", ""))
+
+
+def measure_stats(root, ref, anchor):
+    """按 (ref, anchor) 现场量一遍改动统计。返回 (dict, None) 或 (None, 失败原因)。"""
+    probe = _git(root, "rev-parse", "--git-dir")
+    if probe.returncode != 0:
+        return None, "这里不是 git 仓库，量不了改动数字：%s" % (probe.stderr.strip()[:120] or "无 .git")
+    # 注：`git -C <目录>` 会向上找最近的 .git。本条量的是**提交图**（commit↔commit 的 diff 与计数），
+    # 与工作树无关，所以从仓库的任意子目录（含反证沙箱 tmp/doccmd_sandbox）跑，量到的都是同一份历史。
+    # 真的解析不到仓库时（gitfile 指向不存在的目录）必须走上面那条 FAIL，不许静默当 0 —— 见反证 P。
+    for label, sha in ((u"起点", ref), (u"终点（锚点）", anchor)):
+        chk = _git(root, "cat-file", "-e", sha + u"^{commit}")
+        if chk.returncode != 0:
+            return None, "%s `%s` 在本仓库里不是一个可解析的提交" % (label, sha)
+    if _git(root, "merge-base", "--is-ancestor", anchor, "HEAD").returncode != 0:
+        return None, u"锚点 `%s` 不在当前历史上（不是 HEAD 的祖先），数字描述的提交取不到" % anchor
+    rng = u"%s..%s" % (ref, anchor)
+
+    ss = _git(root, "diff", "--shortstat", rng)
+    ss_out = ss.stdout or u""
+    if ss.returncode != 0:
+        return None, u"`git diff --shortstat %s` 失败：%s" % (rng, (ss.stderr or u"").strip()[:120])
+    m_files = re.search(r"(\d+)\s+files? changed", ss_out)
+    m_ins = re.search(r"(\d+)\s+insertions?\(\+\)", ss_out)
+    m_del = re.search(r"(\d+)\s+deletions?\(-\)", ss_out)
+    if not m_files:
+        return None, u"`git diff --shortstat %s` 没有输出文件数（原始输出：%s）" % (
+            rng, ss_out.strip()[:80] or u"空")
+
+    total = _git(root, "rev-list", "--count", rng)
+    total_txt = (total.stdout or u"").strip()
+    if total.returncode != 0 or not total_txt.isdigit():
+        return None, u"`git rev-list --count %s` 没给出条数（rc=%s，输出：%s）" % (
+            rng, total.returncode, total_txt[:80] or u"空")
+    ours = _git(root, "rev-list", "--count", rng, u"--author=" + OURS_AUTHOR)
+    ours_txt = (ours.stdout or u"").strip()
+    if ours.returncode != 0 or not ours_txt.isdigit():
+        return None, u"`git rev-list --count %s --author=%s` 没给出条数（rc=%s，输出：%s）" % (
+            rng, OURS_AUTHOR, ours.returncode, ours_txt[:80] or u"空")
+    ours_n = int(ours_txt)
+    total_n = int((total.stdout or u"0").strip() or 0)
+    return {
+        u"ours": ours_n,
+        u"total": total_n,
+        u"upstream": total_n - ours_n,
+        u"files": int(m_files.group(1)),
+        u"ins": int(m_ins.group(1)) if m_ins else 0,
+        u"dels": int(m_del.group(1)) if m_del else 0,
+    }, None
+
+
+def check_stats_claims(root):
+    """第 10 条主判定：文档里的改动数字 == 锚点区间实测值。
+    返回 (参与对账的文档份数, ["锚点:声明处数", ...])。"""
+    docs = set()
+    for pat in STATS_DOC_PATTERNS:
+        for p in root.glob(pat):
+            if p.is_file() and "target" not in p.relative_to(root).parts and \
+                    "tmp" not in p.relative_to(root).parts:
+                docs.add(p)
+    cache = {}
+    checked = 0
+    summary = []
+    for path in sorted(docs):
+        rel = path.relative_to(root).as_posix()
+        text = read(path)
+        claims = []
+        for label, rx, field in STATS_CLAIM_RES:
+            for hit in rx.finditer(text):
+                if isinstance(field, tuple):
+                    for grp, fname in zip(range(1, len(field) + 1), field):
+                        claims.append((label, fname, _num(hit.group(grp))))
+                else:
+                    claims.append((label, field, _num(hit.group(1))))
+        if not claims:
+            continue
+        checked += 1
+        anchors = sorted(set(ANCHOR_RE.findall(text)))
+        if not anchors:
+            fail(u"%s 声明了 %d 处改动数字却没有写对账锚点（`对账锚点 `sha``）—— "
+                 u"没有锚点的数字无法复现，正是 README 那组 46/135/14,800 对不上的成因" % (rel, len(claims)))
+            continue
+        if len(anchors) > 1:
+            fail(u"%s 里出现了 %d 个互不相同的对账锚点：%s —— 一份文档只能有一组口径"
+                 % (rel, len(anchors), u"、".join(anchors)))
+            continue
+        anchor = anchors[0]
+        key = (STATS_REF, anchor)
+        if key not in cache:
+            cache[key] = measure_stats(root, STATS_REF, anchor)
+        measured, err = cache[key]
+        if err:
+            fail(u"%s 的改动数字对账失败（锚点 %s）：%s" % (rel, anchor, err))
+            continue
+        for label, field, claimed in claims:
+            if measured[field] != claimed:
+                fail(u"%s 声明 %s = %s，但 `git` 现场量 `%s..%s` 是 %d —— "
+                     u"对外数字必须按锚点实测归一（复现：git diff --shortstat %s..%s）"
+                     % (rel, label, format(claimed, ","), STATS_REF, anchor,
+                        measured[field], STATS_REF, anchor))
+        summary.append(u"%s:%s" % (anchor, len(claims)))
+    if checked == 0:
+        fail(u"对外文档里一处改动统计声明都没匹配到（README*/CHANGELOG.md）—— "
+             u"第 10 条没有输入，等于失效；要么数字被删了，要么书写形状变了")
+    return checked, summary
+
 
 failures = []
 notes = []
@@ -514,6 +680,9 @@ def main():
     if table_rows == 0:
         fail("交付文档里一个闭合的表格行都没找到 —— 表格检查没有实际生效（要么表全被删了，要么判据写坏了）")
 
+    # 第 10 条：对外"改动了多少"的数字，现场跑 git 按锚点重量
+    stats_docs, stats_summary = check_stats_claims(ROOT)
+
     sys.stdout.write("扫描照做类文档 %d 份（围栏内命令行 %d 行），实际门禁 %d 个\n"
                      % (len(howto), blocks_total, actual))
     for note in notes[:5]:
@@ -526,15 +695,19 @@ def main():
     if failures:
         for f in failures:
             sys.stdout.write("FAIL %s\n" % f)
-        sys.stdout.write("FAIL: 对外文档有 %d 处不合格（照做必失败的路径/命令，或损坏的表格行）\n"
-                         % len(failures))
+        sys.stdout.write("FAIL: 对外文档有 %d 处不合格（照做必失败的路径/命令、损坏的表格行，"
+                         "或对不上 git 实测的改动数字）\n" % len(failures))
         return 1
     sys.stdout.write("PASS: 照做类文档 %d 份、%d 行命令行全部指向仓库里真实存在的路径；"
                      "门禁条数三方一致（实际 %d / MIN_GATES %s / 文档声明与表格 %s）；"
-                     "交付文档 %d 份、%d 个表格行全部在同一行闭合\n"
+                     "交付文档 %d 份、%d 个表格行全部在同一行闭合；"
+                     "改动数字 %d 份文档共 %d 处声明与 git 按锚点实测一致（锚点 %s，起点 tag `%s`）\n"
                      % (len(howto), blocks_total, actual, declared_min,
                         "一致" if not any(c[2] not in (None, actual) for c in claims) else "见上",
-                        len(table_files), table_rows))
+                        len(table_files), table_rows,
+                        stats_docs, sum(int(s.split(":")[1]) for s in stats_summary),
+                        "、".join(sorted(set(s.split(":")[0] for s in stats_summary))) or "无",
+                        STATS_REF))
     return 0
 
 

@@ -103,9 +103,14 @@ public final class TdsqlDdlRewriter {
 
         // 分片键不可为 NULL
         String keyDef = items.get(keyItem);
-        if (!toUpperCase(keyDef).contains("NOT NULL")) {
+        if (indexOfTokenOutsideQuotes(keyDef, "NOT NULL") < 0) {
             items.set(keyItem, addNotNull(keyDef));
             notes.add("分片键 `" + key + "` 原先可为空，已补 NOT NULL（TDSQL 要求分片键非空）");
+            if (hasDefaultNull(keyDef)) {
+                notes.add("分片键原先带 DEFAULT NULL，补非空时已一并去掉该默认值 —— "
+                        + "此后「不填这一列」从写入 NULL 变成报错，且历史 NULL 值必须先在库里补成非空值，"
+                        + "否则 ALTER 会因既有可能的 NULL 行而失败");
+            }
         }
 
         // 主键与所有唯一索引都要含分片键
@@ -344,22 +349,71 @@ public final class TdsqlDdlRewriter {
         return sb.toString();
     }
 
-    /** 分片键列补 NOT NULL：位置放在类型之后、AUTO_INCREMENT/DEFAULT 之前 */
+    /**
+     * 分片键列补 NOT NULL：放在 AUTO_INCREMENT / DEFAULT / COMMENT 这些后续属性之前，
+     * 并去掉与之冲突的 {@code DEFAULT NULL}。
+     *
+     * 必须一起去掉默认值：MySQL 不接受 {@code NOT NULL DEFAULT NULL}，实测 8.0.46 在默认严格模式
+     * 与 {@code sql_mode=''} 下都报 ERROR 1067 Invalid default value —— 而 mysqldump 对可空列的标准
+     * 产出恰好就是 {@code DEFAULT NULL}，所以只插 NOT NULL 会让改写产物直接建不出表。
+     */
     private static String addNotNull(String keyDef) {
-        String t = keyDef.trim();
-        String upper = toUpperCase(t);
+        String t = stripDefaultNull(keyDef.trim());
         int insertAt = t.length();
-        int auto = upper.indexOf("AUTO_INCREMENT");
-        int def = indexOfToken(upper, "DEFAULT");
-        if (auto >= 0) {
+        int auto = indexOfTokenOutsideQuotes(t, "AUTO_INCREMENT");
+        int def = indexOfTokenOutsideQuotes(t, "DEFAULT");
+        int comment = indexOfTokenOutsideQuotes(t, "COMMENT");
+        if (auto >= 0 && auto < insertAt) {
             insertAt = auto;
-        } else if (def >= 0) {
+        }
+        if (def >= 0 && def < insertAt) {
             insertAt = def;
+        }
+        if (comment >= 0 && comment < insertAt) {
+            insertAt = comment;
         }
         return t.substring(0, insertAt).trim() + " NOT NULL " + t.substring(insertAt).trim();
     }
 
-    private static int indexOfToken(String upper, String token) {
+    /** 列定义里是否写着 {@code DEFAULT NULL}（引号内的字样不算） */
+    private static boolean hasDefaultNull(String keyDef) {
+        return indexOfDefaultNull(keyDef.trim()) >= 0;
+    }
+
+    /** 返回 {@code DEFAULT NULL} 这一对的起始下标，没有则 -1 */
+    private static int indexOfDefaultNull(String t) {
+        int def = indexOfTokenOutsideQuotes(t, "DEFAULT");
+        if (def < 0) {
+            return -1;
+        }
+        int i = def + "DEFAULT".length();
+        while (i < t.length() && Character.isWhitespace(t.charAt(i))) {
+            i++;
+        }
+        if (i + 4 > t.length() || !"NULL".equals(toUpperCase(t).substring(i, i + 4))) {
+            return -1;
+        }
+        if (i + 4 < t.length() && isNameChar(t.charAt(i + 4))) {
+            return -1;
+        }
+        return def;
+    }
+
+    private static String stripDefaultNull(String t) {
+        int def = indexOfDefaultNull(t);
+        if (def < 0) {
+            return t;
+        }
+        int i = def + "DEFAULT".length();
+        while (i < t.length() && Character.isWhitespace(t.charAt(i))) {
+            i++;
+        }
+        return (t.substring(0, def) + t.substring(i + 4)).trim();
+    }
+
+    /** 在引号区之外找关键字 token；COMMENT 'NOT NULL 约束' 这类字样不得当成列属性 */
+    private static int indexOfTokenOutsideQuotes(String raw, String token) {
+        String upper = toUpperCase(raw);
         int from = 0;
         while (true) {
             int idx = upper.indexOf(token, from);
@@ -369,10 +423,10 @@ public final class TdsqlDdlRewriter {
             boolean leftOk = idx == 0 || !isNameChar(upper.charAt(idx - 1));
             int right = idx + token.length();
             boolean rightOk = right >= upper.length() || !isNameChar(upper.charAt(right));
-            if (leftOk && rightOk) {
+            if (leftOk && rightOk && !inQuotedRegion(raw, idx)) {
                 return idx;
             }
-            from = right;
+            from = idx + 1;
         }
     }
 

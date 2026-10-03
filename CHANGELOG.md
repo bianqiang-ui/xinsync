@@ -146,10 +146,12 @@
   `check_yaml.py`、`check_ports.py`、`check_executor_streams.py`、`check_authz_seams.py`、
   `check_sql_identifiers.py`、`check_job_param_safety.sh`、`check_datasource_secret_scrub.py`、
   `check_log_secret_mask.sh`、`check_executor_tmpfile.sh`、`check_doc_secrets.py`、
-  `check_doc_commands.py`（九条规则，含“交付文档的表格行必须同一行闭合”）、`check_package_deps.sh`、`check_admin_tests.sh`、`check_tdsql.sh`
+  `check_doc_commands.py`（十条规则，含“交付文档的表格行必须同一行闭合”“对外改动数字必须按锚点与 git 实测一致”）、`check_package_deps.sh`、`check_admin_tests.sh`、`check_tdsql.sh`
 - **统一入口搬进仓库**：`bash devops/fork-workflow.sh recheck`（此前 README 指的 `tools/fork-workflow.sh`
   在工作台目录里，clone 下来不存在 —— 是一张空头支票，现已由 `check_doc_commands.py` 反向钉住）
-- 第 13 道门禁的**十二条反证 A–L**全部成立（整树沙箱每轮重建，判“成立” = 基线 rc=0 且改坏 rc≠0 且输出点名到本次规则）；K 拆表格行、L 掏空表格判据，一抓一放。
+- 第 13 道门禁的**十六条反证 A–P**全部成立（整树沙箱每轮重建，判“成立” = 基线 rc=0 且改坏 rc≠0 且输出点名到本次规则）；K 拆表格行、L 掏空表格判据，一抓一放；
+  M–P 是本轮新加的第 10 条规则自己那四条（M 改一个数字、N 把锚点换成不存在的 sha、O 把三份文档的声明**全部**抹掉证明规则会自曝“没有输入”、P 让 git 解析不出仓库证明“量不到”是红灯而不是静默跳过）。
+  P 的第一版写的是“删掉沙箱的 .git”，实测**不成立**（rc 仍为 0）：`git -C 沙箱` 会向上走到外层仓库继续量 —— 改成把 gitfile 指向不存在的目录才真的量不到。
   同轮的一次性清点 `tmp/draft/audit_inline_paths.py`（**未进门禁** —— 行内反引号里的“像路径的串”绝大多数是解包后目录、列名/方法名缩写或故意的错误示例，判据一宽就天天红灯）抓出并改正了一处本轮自己写错的代码定位（包根与 mapper 目录名）。
 - 第 14 道门禁 `check_package_deps.sh`（判定体 `lib_package_deps.py`）判的是**产出的 tar**而不是 pom，**十二条反证 A–L 全部成立**（`tmp/evidence/falsify-pkg-deps-{A..L}.txt`；沙箱里的合成 tar 逐字抄真实部署包的 jar 文件名清单，跑的是外层 shell 门禁，所以“缺产物”那条分支也在范围内）；`MIN_GATES` 同步 13→14。
   第一遍 **D 不成立**，抓出的是门禁自己的洞：EOL 残留原先只按“该包应有的标签”去匹配，于是“在 executor 包里新引进 `log4j-1.2.17.jar`”永远扫不到（executor 的应扫集合是空）—— 改成对每个包扫全部台账模式再与应有集合比对后 D 才真的红。
@@ -164,15 +166,47 @@
 - Assembly 打包输出 `packages/datax-admin_2.1.2_1.tar.gz`、`packages/datax-executor_2.1.2_1.tar.gz`、
   `build/datax-web-2.1.2.tar.gz`（**必须 `mvn install`，`package` 不产出**）
 
-### 📊 统计（相对上游基线 `upstream-baseline`，实测值，随批次前移）
+### 🔧 批次11-T0/T1 — 2026-10-03 复审收口
 
-> 口径：数字取**生成这次对账时的 HEAD**，也就是不含"携带这些数字的那次提交"本身
-> （含进去就永远差一个，那是自指错误，不是精度）。复现：`git diff --shortstat upstream-baseline..HEAD`。
+外部复审（逐条复核本仓声明）点出三件事，本轮全部按"实测 → 修 → 反证"处理：
 
-- **提交数**：47
-- **修改文件**：139
-- **新增代码**：+15,468 行
-- **删除代码**：-654 行
+- **TDSQL 改写产物建表必失败（已证实，非"可能"）**：`TdsqlDdlRewriter` 把 `NOT NULL` 插在 `DEFAULT`
+  之前，对 mysqldump 的标准产出 `` `uid` bigint DEFAULT NULL `` 会得到 `NOT NULL DEFAULT NULL`。
+  复审当时标注"是否报错未实测"，本轮把改写产物逐条喂给真实 MySQL **8.0.46**（默认 `STRICT_TRANS_TABLES`）：
+  **3 条 `ERROR 1067 Invalid default value`**。修法：补非空时**同时摘掉 `DEFAULT NULL`**，
+  并把语义变化写进 notes（"不填这一列"从写入 NULL 变成报错；历史 NULL 行必须先在库里补非空，否则 ALTER 失败）；
+  显式默认值 `DEFAULT '7'` 原样保留，不被误删。
+- **同一文件的 `contains("NOT NULL")` 误判**：列定义里 `COMMENT '这里写着 NOT NULL 也只是注释'`
+  会被当成"该列已非空"而漏补 `NOT NULL`；实测该表因分片键进了主键 ⇒ **`ERROR 1171 All parts of a
+  PRIMARY KEY must be NOT NULL`**，同样是建表期硬失败。修法：改用按词边界、跳过引号区的
+  `indexOfTokenOutsideQuotes()`，`AUTO_INCREMENT`/`DEFAULT`/`COMMENT` 的定位共用同一个函数。
+  两条都由新增单测钉住（`check_tdsql.sh` 现跑 12 条），反证三段式：实现退回修复前 → 门禁红
+  （`Tests run: 12, Failures: 2`，点名的正是这两条测试）→ 换回修复版 → 12 条全绿。
+- **对外统计数字第三次对不上，这次把"数字"本身交给机器量**：README 曾写 46/135/14,800、
+  CHANGELOG 曾写 139/+15,468，而 `git diff --shortstat` 实测是另一组值。根因有两层：
+  ① 参照物用了**维护者本地的台账分支**（没随 fork 推送，别人 clone 下来命令根本跑不出来）；
+  ② 终点写成 `HEAD` ⇒ "携带这组数字的提交"自己会被算进去，谁跑都比文档大一点（自指失配）。
+  现在：起点固定公开 tag `v-2.1.2`、终点写成**对账锚点 sha**、提交数按作者隔离，
+  并由第 13 道门禁新增的**第 10 条规则**现场跑 git 重量（改错数字、锚点不存在、声明被整体删光、
+  git 解析不到仓库，四种情况都会红灯）。`devops/fork-workflow.sh diff` 同步改为：
+  本地没有台账分支时退回公开 tag 并打印口径提示，陌生 clone 里不再报"先执行 baseline 子命令"。
+
+### 📊 统计（相对上游 v2.1.2 发布点 tag `v-2.1.2`，对账锚点 `67c1004`，实测值）
+
+> 口径一：**参照物用公开的 tag**。`upstream-baseline` 是维护者本地的台账分支，没有随 fork 推送，
+> 别人 clone 下来跑不出同一条命令，所以对外数字一律按 `v-2.1.2` 计（历史重写后上游提交在本仓库里
+> 是另一批 sha，拿真上游 sha 去 diff 会把整个仓库算成改动，因此也不能改用上游 sha）。
+> 口径二：**终点写 sha，不写 `HEAD`**。锚点 `67c1004` 就是写下这组数字时的仓库 HEAD。写 `HEAD`
+> 会让这组数字自指失配——携带这些数字的那次提交本身落在 `HEAD` 里，谁跑都比文档大一点，
+> 于是"可复现"变成一句空话（这正是本文件此前 139/+15,468 那组数字对不上的机制之一）。
+> 复现：`git diff --shortstat v-2.1.2..67c1004`；提交数按作者隔离（上游那 54 个提交没有我们的邮箱）：
+> `git log --author=bianqiang@gmail.com --oneline v-2.1.2..67c1004 | wc -l`。
+> 这四处数字与锚点由门禁 `devops/checks/check_doc_commands.py` 第 10 条现场重量一遍，改错或改旧都红灯。
+
+- **提交数**：47（我们自己写的；`v-2.1.2..67c1004` 共 101 个提交，其中 54 个是上游 2.1.2 之后的）
+- **修改文件**：135
+- **新增代码**：+12,095 行
+- **删除代码**：-734 行
 
 复核口径与实测命令：
 

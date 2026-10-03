@@ -31,6 +31,9 @@ set -euo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BASELINE="upstream-baseline"
+# 对外可复现的参照物：本地台账分支不随 fork 推送，陌生 clone 里只有这个 tag。
+# 对外文档里的改动数字一律按它计（并由 check_doc_commands.py 第 10 条现场重量）。
+UPSTREAM_TAG="v-2.1.2"
 UPSTREAM_REMOTE="upstream"   # https://github.com/WeiYe-Jing/datax-web.git
 FORK_REMOTE="origin"         # https://github.com/bianqiang-ui/xinsync.git（我们的 fork，只读）
 UPSTREAM_URL="https://github.com/WeiYe-Jing/datax-web.git"
@@ -114,12 +117,27 @@ cmd_baseline() {
 }
 
 cmd_diff() {
-  git rev-parse --verify --quiet "$BASELINE" >/dev/null || { echo "先执行 baseline 子命令"; exit 1; }
-  echo "== 相对 $BASELINE 的文件级改动 =="
-  git diff --stat "$BASELINE"..HEAD
+  # 参照物优先用本地台账基线分支（维护者口径：纯上游 sha 对齐）。
+  # 但 $BASELINE 没随 fork 推送，陌生 clone 里根本不存在 —— 上一版这里直接
+  # "先执行 baseline 子命令" 退出 1，而 CHANGELOG 把 `fork-workflow.sh diff` 当作
+  # "复核口径与实测命令"写给读者，等于又一张空头支票（与门禁第 4 条同一类缺陷）。
+  # 所以取不到基线分支时退回公开 tag：任何 clone 里都解析得到。
+  local ref="$BASELINE"
+  if ! git rev-parse --verify --quiet "$ref" >/dev/null; then
+    ref="$UPSTREAM_TAG"
+    git rev-parse --verify --quiet "$ref" >/dev/null || {
+      echo "[FAIL] 既没有本地分支 $BASELINE，也找不到公开 tag $ref —— 无从对账"
+      exit 1
+    }
+    echo "[提示] 本地没有 $BASELINE（它不随 fork 推送），改用公开 tag $ref 作参照物。"
+    echo "       这个区间含上游 2.1.2 之后的提交，只按作者隔离才是我们自己的改动："
+    echo "       git log --author=bianqiang@gmail.com --oneline $ref..HEAD"
+  fi
+  echo "== 相对 $ref 的文件级改动 =="
+  git diff --stat "$ref"..HEAD
   echo
   echo "== 提交清单 =="
-  git log --oneline "$BASELINE"..HEAD
+  git log --oneline "$ref"..HEAD
 }
 
 cmd_recheck() {

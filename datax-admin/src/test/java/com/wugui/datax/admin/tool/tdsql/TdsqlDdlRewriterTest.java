@@ -43,6 +43,22 @@ public class TdsqlDdlRewriterTest {
             + "  PRIMARY KEY (id)\n"
             + ") ENGINE=InnoDB;";
 
+    /** 分片键可空且带 DEFAULT NULL（mysqldump 对可空列的标准产出），注释里还故意写了 NOT NULL */
+    private static final String COMMENT_TRAP =
+            "CREATE TABLE `comment_trap` (\n"
+            + "  `id` bigint(20) NOT NULL AUTO_INCREMENT,\n"
+            + "  `shard_k` bigint(20) DEFAULT NULL COMMENT '这里写着 NOT NULL 也只是注释',\n"
+            + "  PRIMARY KEY (`id`)\n"
+            + ") ENGINE=InnoDB;";
+
+    /** 分片键可空但有真实默认值：补非空时只能去掉 DEFAULT NULL，不能把 DEFAULT '7' 一起删掉 */
+    private static final String KEEP_DEFAULT =
+            "CREATE TABLE `keep_default` (\n"
+            + "  `id` bigint(20) NOT NULL AUTO_INCREMENT,\n"
+            + "  `shard_k` int(11) DEFAULT '7',\n"
+            + "  PRIMARY KEY (`id`)\n"
+            + ") ENGINE=InnoDB;";
+
     @Test
     public void shardTableMustPutShardKeyIntoPkAndEveryUk() {
         TdsqlDdlRewriter.Result r =
@@ -164,6 +180,56 @@ public class TdsqlDdlRewriterTest {
         assertTrue(ddl, ddl.contains("key_id bigint(20) NOT NULL"));
         // 另一条以 CHECK 开头的列同样不能被当成约束而丢掉
         assertTrue(ddl, ddl.contains("check_time datetime"));
+    }
+
+    /**
+     * 补 NOT NULL 时必须连同 {@code DEFAULT NULL} 一起摘掉。
+     *
+     * MySQL 不接受 {@code NOT NULL DEFAULT NULL}：实测 8.0.46 在默认严格模式和 {@code sql_mode=''}
+     * 下都报 ERROR 1067 Invalid default value。旧实现只插 NOT NULL，产物直接建不出表；
+     * 而老断言写的是 {@code contains("`uid` bigint(20) NOT NULL")}，残缺产物照样绿，所以这里逐字钉列定义。
+     */
+    @Test
+    public void nullableShardKeyMustDropDefaultNullSoTheDdlStillBuilds() {
+        TdsqlDdlRewriter.Result r =
+                TdsqlDdlRewriter.rewrite(ORDERS, TdsqlTableType.SHARD, "uid");
+
+        assertTrue(r.getDdl(), r.isSuccess());
+        String ddl = collapse(r.getDdl());
+        assertTrue("分片键列定义必须是 `uid` bigint(20) NOT NULL：" + ddl,
+                ddl.contains("`uid` bigint(20) NOT NULL,"));
+        assertFalse("产物里不得出现自相矛盾的 NOT NULL DEFAULT NULL：" + ddl,
+                ddl.contains("NOT NULL DEFAULT NULL"));
+        // 去掉默认值是语义变更，必须写进 notes 让操作者知道
+        assertHasNote(r, "DEFAULT NULL");
+    }
+
+    /** 注释里写着 NOT NULL 不等于列已经非空：漏补会让分片键带着 NULL 进主键，MySQL 报 ERROR 1171 */
+    @Test
+    public void commentMentioningNotNullMustNotSuppressTheFix() {
+        TdsqlDdlRewriter.Result r =
+                TdsqlDdlRewriter.rewrite(COMMENT_TRAP, TdsqlTableType.SHARD, "shard_k");
+
+        assertTrue(r.getDdl(), r.isSuccess());
+        String ddl = collapse(r.getDdl());
+        assertTrue("COMMENT 里的字样不该被当成列属性：" + ddl,
+                ddl.contains("`shard_k` bigint(20) NOT NULL"));
+        assertFalse(ddl, ddl.contains("NOT NULL DEFAULT NULL"));
+    }
+
+    /** 真实默认值要保住：只有 DEFAULT NULL 才随补非空一起删除 */
+    @Test
+    public void explicitDefaultMustSurviveTheNotNullFix() {
+        TdsqlDdlRewriter.Result r =
+                TdsqlDdlRewriter.rewrite(KEEP_DEFAULT, TdsqlTableType.SHARD, "shard_k");
+
+        assertTrue(r.getDdl(), r.isSuccess());
+        String ddl = collapse(r.getDdl());
+        assertTrue(ddl, ddl.contains("`shard_k` int(11) NOT NULL DEFAULT '7'"));
+        for (String note : r.getNotes()) {
+            assertFalse("这一列本来就没有 DEFAULT NULL，不该报去掉它：" + note,
+                    note.contains("DEFAULT NULL"));
+        }
     }
 
     private static void assertHasNote(TdsqlDdlRewriter.Result r, String keyword) {

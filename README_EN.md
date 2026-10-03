@@ -20,14 +20,22 @@ The upstream project stopped being maintained in June 2024 with 180+ open issues
 >
 > This is **not a simple bug fix** — it's a **comprehensive, systematic security transformation**:
 >
-> - 📊 **46 commits** touching **135 files**, adding **14,800 lines** of code against the upstream baseline
->   `upstream-baseline` (measured on 2026-10-03 at the close of round 18, excluding the commit that carries
->   these numbers; reproduce with `git diff --shortstat upstream-baseline..HEAD` — the numbers move with every batch)
+> - 📊 Against the upstream **v2.1.2 release point** (tag `v-2.1.2`, present in every clone), up to the
+>   reconciliation anchor `67c1004`: **47 of our own commits**, **135 files**, **+12,095 / −734 lines**.
+>   The anchor is literally the repository HEAD at the moment these numbers were written — pinned as a
+>   sha rather than `HEAD`, because otherwise the commit carrying the numbers counts itself and nobody
+>   can ever reproduce them. Both commands run verbatim in any clone, and gate #10 re-measures them:
+>   `git diff --shortstat v-2.1.2..67c1004` and
+>   `git log --author=bianqiang@gmail.com --oneline v-2.1.2..67c1004 | wc -l`
+>   (we deliberately do not quote the maintainer's local baseline branch — it was never pushed with the fork,
+>   so a fresh clone could not reproduce it)
 > - 🔒 Fixed **15 security vulnerabilities** (5 of them CRITICAL) — RPC deserialization RCE, IDOR, command injection, Log4Shell, GLUE script RCE
 > - 🛡️ **33 authorization seams** verified one by one by a gate script (single `AccessControl` implementation, ownership always read back from the DB row)
 > - ✅ Long-standing community issues closed: #487 orphan process tree, #296 Hive connection, #389 scheduler stalls, #265 HBase datasource, and more
 > - 🏗️ **14 automated security gates** — one command to re-run everything, zero silent regression
-> - 📝 **2,024 lines of development log** plus a technical manual and upgrade notes, every claim backed by measured evidence
+> - 📝 Every batch ships with measured evidence and falsification records, written into the **CHANGELOG**
+>   and the corresponding commit messages (the round-by-round working ledger and technical manual are
+>   process documents and are not published with the repository)
 
 ## Architecture
 
