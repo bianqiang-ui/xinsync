@@ -21,3 +21,8 @@
 # devops/checks 下的门禁是 python 脚本，跑一次就会生成缓存目录
 __pycache__/
 *.pyc
+# 不外发的本地文档与素材：开发台账/分析文档、参赛材料、临时工作目录
+/docs/
+/doc/competition/
+/doc/demo/
+/tmp/

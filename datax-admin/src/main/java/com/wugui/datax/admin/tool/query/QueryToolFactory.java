@@ -23,7 +23,7 @@ public class QueryToolFactory {
             return getMySQLQueryToolInstance(jobDatasource);
         } else if (JdbcConstants.TDSQL.equals(datasource)) {
             // TDSQL 连 proxy 即 MySQL 协议，元数据查询先复用 MySQL 实现；
-            // 分片键/物理库等分布式元数据要到接真实例那一批再挂（见 docs/tdsql-plan.md T1）
+            // 分片键/物理库等分布式元数据要到接真实例那一批再挂
             return getMySQLQueryToolInstance(jobDatasource);
         } else if (JdbcConstants.ORACLE.equals(datasource)) {
             return getOracleQueryToolInstance(jobDatasource);

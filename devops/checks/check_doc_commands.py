@@ -34,8 +34,8 @@ README 里"9 个自动化安全检查""9 道门禁"这类声明就是靠人记�
 现在把"文档声明的门禁条数 == `devops/checks/check_*` 实际条数 ==
 `devops/fork-workflow.sh` 里的 `MIN_GATES` 默认值"三者钉成一条，
 加门禁时忘抬下限、或者 README 数字没跟着改，都会在这里变红灯。
-数字对账的作用域是"现状文档"（README*、`doc/XinSync-*`、技术手册、升级说明），
-**不含 `docs/devlog.md`**：台账里那些"N 个门禁"是当时那条 recheck 输出的原文引用，
+数字对账的作用域是"现状文档"（README*、`doc/XinSync-*`）：
+台账（保真、不外发）里那些"N 个门禁"是当时那条 recheck 输出的原文引用，
 把它们改成现在的数字等于把开发日志改成假事实 —— 与命令扫描同一取舍。
 同理，`新增第 9 个门禁` 这种带"第"字的序数句是历史陈述，永久为真，不参与对账。
 
@@ -51,7 +51,7 @@ README 里"9 个自动化安全检查""9 道门禁"这类声明就是靠人记�
 第一行 `…+14,800 / −654**，` 结尾没有 `|`，第二行从"口径为 …"裸起。GFM 里第二行**不再是表格的一部分**，
 整行的单元格随之错位；而 git 不报错、其余门禁全绿、diff 里人眼看不出（正因为它是"合法散文"）。
 所以这条只能机器钉。
-范围与命令扫描**不同**：命令扫描不动 `docs/devlog.md`，因为那里的数字是"当时实测"的历史事实；
+范围与命令扫描**不同**：命令扫描只动对外照做类文档，因为那里的命令是"当时实测"的历史记录；
 表格语法不是事实而是**装订**，把断行接回去不改变任何一句陈述的内容，所以台账一起查。
 围栏内的行一律跳过 —— 文档里的 mermaid 边标签、ASCII 样例都有以 `|` 开头的行，那是图不是表。
 """
@@ -67,10 +67,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 
-# "照做类"文档：读者会一行行复制的对外入口。docs/ 下的开发日志与技术手册**不在内** ——
+# "照做类"文档：读者会一行行复制的对外入口。开发台账与技术手册（保真、不外发）**不在内** ——
 # 那里的命令是"当时在哪台机器、哪个状态下实测的"历史记录，把它们批量改对等于把日志改成假事实。
-HOWTO_PATTERNS = ("README*.md", "doc/XinSync-*.md", "doc/datax-web/*deploy*.md",
-                  "doc/competition/project-intro.md")
+HOWTO_PATTERNS = ("README*.md", "doc/XinSync-*.md", "doc/datax-web/*deploy*.md")
 
 MODULES = ("datax-admin", "datax-core", "datax-executor", "datax-rpc", "datax-assembly")
 # .gitignore 里就是被忽略的构建产物：要求它们"在仓库里存在"是错的
@@ -107,12 +106,11 @@ PATH_REF_RES = (
 DOCKER_RE = re.compile(r"\bdocker-compose\b|\bdocker\s+compose\b|\bDockerfile\b")
 BOOT_PLUGIN_RE = re.compile(r"spring-boot-maven-plugin")
 MIN_GATES_RE = re.compile(r'MIN_GATES:-(\d+)\}')
-# 门禁条数只在"现状文档"里对账。`docs/devlog.md` 整体排除 —— 它是逐轮台账，
-# 里面那些"N 个门禁"要么是当时那条 `RECHECK PASS: 8 个门禁…` 输出的**原文引用**，
-# 要么是"这一轮从 7 抬到 8"的过程记录；把它们改成现在的数字等于把开发日志改成假事实
-# （与文件头对命令扫描的同一取舍）。
-CLAIM_PATTERNS = ("README*.md", "doc/XinSync-*.md", "docs/technical-manual.md", "docs/upgrade-notes.md",
-                  "doc/competition/project-intro.md")
+# 门禁条数只在"现状文档"里对账：README 与启动指南。
+# 开发台账（保真、不外发）整体排除 —— 里面那些"N 个门禁"要么是当时那条
+# `RECHECK PASS: 8 个门禁…` 输出的**原文引用**，要么是"这一轮从 7 抬到 8"的过程记录；
+# 把它们改成现在的数字等于把开发日志改成假事实（与文件头对命令扫描的同一取舍）。
+CLAIM_PATTERNS = ("README*.md", "doc/XinSync-*.md")
 # 现状文档里照抄的一行复跑输出（`RECHECK PASS: 11 个门禁 + …`）记的是**当时**的实测值，
 # 不参与对账。判据必须精确到"这一小段"，不能整行跳过：
 # 上一版用 `if 'RECHECK PASS' in line: continue`，结果技术手册里那条**门禁清单表格行**
@@ -307,18 +305,16 @@ def count_gates():
     return sorted(gates)
 
 
-# recheck 入口的"现状文档"范围：与门禁条数对账同一批文件（不含 docs/devlog.md 台账）
-ENTRY_PATTERNS = ("README*.md", "doc/XinSync-*.md", "docs/technical-manual.md",
-                  "docs/upgrade-notes.md", "docs/fork-workflow.md",
-                  "doc/competition/project-intro.md")
+# recheck 入口的"现状文档"范围：与门禁条数对账同一批文件
+ENTRY_PATTERNS = ("README*.md", "doc/XinSync-*.md")
 # clone 之后 `bash tools/fork-workflow.sh` 必然报 No such file —— 那一层在外层工作台目录里，
 # 随 clone 交付不了。入口已搬进仓库（devops/fork-workflow.sh），旧写法不得残留。
 STALE_ENTRY_RE = re.compile(r"(?:bash|sh|source)\s+tools/fork-workflow\.sh")
 
 # 第 7 条（表格行闭合）的扫描范围：所有会被渲染成交付物的 markdown。
-# 与 HOWTO/CLAIM 两组的取舍不同，这里**包含** docs/devlog.md 与 CHANGELOG.md ——
+# 与 HOWTO/CLAIM 两组的取舍不同，这里**包含** CHANGELOG.md ——
 # 查的是装订不是事实，接回断行不改变任何一句陈述的内容。
-TABLE_DOC_PATTERNS = ("README*.md", "CHANGELOG.md", "doc/*.md", "doc/**/*.md", "docs/*.md")
+TABLE_DOC_PATTERNS = ("README*.md", "CHANGELOG.md", "doc/*.md", "doc/**/*.md")
 # 行首的表格标记：允许前导空白（缩进表格在 GFM 里同样是表）
 TABLE_ROW_RE = re.compile(r"^\s*\|")
 

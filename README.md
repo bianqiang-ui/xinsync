@@ -156,7 +156,7 @@ bash devops/fork-workflow.sh recheck
 | `devops/checks/check_tdsql.sh` | TDSQL DDL 改写单测真跑 |
 
 > 门禁的判据是"真跑并且看得出现在"：跑 mvn 的检查要求 `Tests run` 为正、`Failures/Errors/Skipped` 为 0，
-> 只 grep 源码的检查则配反证（把守卫改坏必须变红）。每条门禁都有对应的反证记录，见 `docs/devlog.md`。
+> 只 grep 源码的检查则配反证（把守卫改坏必须变红）。
 
 ---
 

@@ -16,15 +16,13 @@ r"""门禁：对外文档里不得出现"可直接抄用的密钥字面值"，�
 2) 本机绝对路径（`D:\code\githubCode\...`、`/d/code/...`、`C:\Users\<name>`）。
    这类路径照做必失败（别人的机器上没有这个目录），同时把维护者的用户名/目录结构一起发出去。
 
-范围为什么只圈 fork 自己的对外文档（README*、docs/、doc/XinSync-*）：
+范围为什么只圈 fork 自己的对外文档（README*、doc/XinSync-*）：
 上游老文档里带着 `/Users/xxx`、`/home/xxx` 这类示例路径，一上来就把全仓库扫成红灯的门禁
 只会被下一次构建忽略掉 —— 门禁必须今天就能绿，才谈得上守住明天。
 
 两条规则的覆盖面不同，这是刻意的：
-  - 密钥字面值：所有对外文档一起扫（包括开发日志）；
-  - 本机路径：只扫**照做类**文档（README、部署/启动指南）。`docs/devlog.md` 与
-    `docs/technical-manual.md` 里的工作副本路径是"当时在哪台机器上实测的"历史记录，
-    把它们批量改成占位符等于把开发日志改成假事实 —— 那类文档要保真，不要保整洁。
+  - 密钥字面值：所有对外文档一起扫；
+  - 本机路径：只扫**照做类**文档（README、部署/启动指南）。
 """
 import io
 import re
@@ -63,7 +61,7 @@ LOCAL_PATH_RES = (
 
 def doc_files():
     files = []
-    for pattern in ("README*.md", "docs/*.md", "doc/XinSync-*.md"):
+    for pattern in ("README*.md", "doc/XinSync-*.md"):
         files.extend(ROOT.glob(pattern))
     return sorted(set(files))
 

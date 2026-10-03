@@ -104,7 +104,7 @@ public class DataxJsonHelper implements DataxJsonInterface {
 
         this.readerColumns = convertKeywordsColumns(datasource, this.readerColumns);
         if (MYSQL.equals(datasource) || TDSQL.equals(datasource)) {
-            // TDSQL 用 mysqlreader 连 proxy 的逻辑表，路由交给内核（模式 A，见 docs/tdsql-plan.md）
+            // TDSQL 用 mysqlreader 连 proxy 的逻辑表，路由交给内核（模式 A）
             readerPlugin = new MysqlReader();
             buildReader = buildReader();
         } else if (ORACLE.equals(datasource)) {

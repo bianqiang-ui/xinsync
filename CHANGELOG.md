@@ -18,8 +18,7 @@
 >    排在 Boot BOM 前面，重建后两个包内 netty 家族（`netty-all` 与它带出的 34 个单模块）全部 4.1.100.Final，
 >    并由第 14 道门禁 `devops/checks/check_package_deps.sh` 读 tar 钉住。
 > 另外原表把 #587/#652/#698/#389/#348/#265/#444/#487/#672/#632/#478/#492/#336/#512 的**主题写串了**
-> （例如把 #487 写成"进程树残留"、把 #389 写成"Hive Kerberos"）。以下每一条都以
-> `docs/issues-analysis.md`（社区 Issue 盘点，含 Issue 原文编号）与 `docs/devlog.md`（逐批实测记录）为准。
+> （例如把 #487 写成"进程树残留"、把 #389 写成"Hive Kerberos"）。以下每一条都以本仓源码与实测结论为准。
 
 ---
 
@@ -111,7 +110,7 @@
 - **历史数据** — 库里 `job_log.trigger_msg` 的**历史行**仍可能含明文口令，本轮只保证"从现在起不再写入"；
   存量清理需真实库执行并验证，尚未做。
 
-### 🐛 社区 Issue 修复（编号与主题以 `docs/issues-analysis.md` 为准）
+### 🐛 社区 Issue 修复
 
 | Issue | 社区反馈的主题 | 本 fork 的处置 | 验证档位 |
 |-------|--------------|---------------|---------|
@@ -159,9 +158,7 @@
   （删门禁必须当场红灯）、`SKIP_MVN_GATES` 的结果是 PARTIAL 且退出码非 0（部分复跑不得冒充全绿）
 - Shell 脚本统一 LF 换行符（`.gitattributes` 强制）
 - 44 个测试类；管理端回归 101 条用例，core/executor/tdsql/临时文件/遮蔽各条链路都有行为用例
-- 文档：`docs/devlog.md` 2,254 行开发日志（逐批"改了什么 + 实测证据 + 反证记录"）、
-  `docs/technical-manual.md`、`docs/upgrade-notes.md`、`docs/issues-analysis.md`、
-  `docs/tdsql-plan.md`、`docs/tdsql-construction-orders.md`、`docs/fork-workflow.md`
+- 门禁入口随仓库交付：`bash devops/fork-workflow.sh recheck` 一条命令复跑全部 14 道门禁
 - Docker 镜像 `maven:3.8-openjdk-8` 仅用作**构建与验证环境**（本仓库不提供 Dockerfile / docker-compose，
   README 里原来的 "Docker 部署" 步骤照做必失败，已删除并如实说明）
 - Assembly 打包输出 `packages/datax-admin_2.1.2_1.tar.gz`、`packages/datax-executor_2.1.2_1.tar.gz`、

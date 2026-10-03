@@ -29,7 +29,7 @@ netty-common / netty-transport … 单模块里。netty-all 一升到 4.1.100，
 而上一轮的 `-pl datax-admin -am` 根本不构建 datax-executor / datax-assembly，
 "改了声明、包没变"完全静默。只有读**产出的 tar** 才能发现。
 
-七条判据（每条都有配套反证，规则与条数见 docs/technical-manual.md 的门禁表）：
+七条判据（每条都有配套反证）：
   1) 根 pom 的 `<properties>` 里每个安全版本 pin 必须存在（否则后面全是空判）；
   2) 该 pin 对应的 groupId:artifactId 必须在根 pom 的 `<dependencyManagement>` 里有条目，
      且条目版本就是这个 property 或这个值 —— **只有 property 没有 dM 条目 = FAIL**（netty 的错法），

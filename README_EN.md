@@ -153,7 +153,7 @@ bash devops/fork-workflow.sh recheck
 
 > Gate judging is deliberately strict: the Maven-backed gates require a positive `Tests run` with
 > `Failures: 0, Errors: 0, Skipped: 0`; the static gates come with falsification records
-> (break the guard → the gate must go red → restore → green). See `docs/devlog.md`.
+> (break the guard → the gate must go red → restore → green).
 
 ---
 

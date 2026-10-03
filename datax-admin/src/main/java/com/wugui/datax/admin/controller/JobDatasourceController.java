@@ -115,7 +115,7 @@ public class JobDatasourceController extends BaseController {
      * 下面的 {@code update()} 要用库里那条旧值认"旧前端原样回提的密文"；service 一起剥掉的话比较永远不成立。
      *
      * <h2>为什么不用"改管理员专属"来收口</h2>
-     * 普通用户建作业时要选数据源，这三个读接口必须对全体登录用户开放（见 docs/upgrade-notes.md 的 P6 待拍板项）。
+     * 普通用户建作业时要选数据源，这三个读接口必须对全体登录用户开放（见 CHANGELOG 的 P6 待拍板项）。
      * 所以收口点在字段上，不在入口上。
      */
     private static JobDatasource hideSecret(JobDatasource datasource) {
