@@ -58,6 +58,10 @@ README 里"9 个自动化安全检查""9 道门禁"这类声明就是靠人记�
 第 10 条：对外"改动了多少"这组数字（提交数 / 文件数 / 增删行数），门禁现场跑 `git` 按**锚点**重量一遍。
 同一个缺陷已经犯了三次，判据与量法见下面 `STATS_CLAIM_RES` 处的注释；一句话：
 数字只能相对于一个写死的 commit 成立，参照物写 `HEAD` 的那组数字必然被"携带它的提交"污染。
+
+第 11 条：对外文档里的"N 个测试类"，门禁现场数一遍文件系统重量。
+它和第 10 条是同一个病的两个面 —— 第 10 条量 git 历史（要锚点），本条量**工作树里的文件形状**，
+不用跑 maven，所以能待在快门禁里。判据与三点边界见 `TESTDOC_PATTERNS` 处的注释。
 """
 import io
 import re
@@ -299,6 +303,143 @@ def check_stats_claims(root):
         fail(u"对外文档里一处改动统计声明都没匹配到（README*/CHANGELOG.md）—— "
              u"第 10 条没有输入，等于失效；要么数字被删了，要么书写形状变了")
     return checked, summary
+
+
+# ---------------------------------------------------------------------------
+# 第 11 条：对外"N 个测试类"这组数字，门禁现场数文件系统重量一遍。
+#
+# 为什么必须有这条：第 10 条治的是 git 历史侧的数字，测试类数量是**工作树侧**的同一类声明，
+# 靠人记得改同样会漂（实测：批次11 那轮 CHANGELOG 先写 46，当场 `find` 量出来是 44）。
+# 本条不跑 maven，只走文件树，所以待在快门禁里，改一次文档就能看见。
+#
+# 口径（唯一一处实现，文档里照抄的命令必须与它一致）：各模块 `src/test/java` 下递归的
+# `*Test.java` 文件数。三点边界都在下面：
+#   - 模块**自动发现**（顶层目录里真有 `src/test/java` 才算），不写死清单 ——
+#     写死了新增模块会静默漏计，总数偏小而没人发现；
+#   - 不计 `*Tests.java`（本仓实测 1 个）与放在测试目录里的工具类（实测 4 个）；
+#     文档若把这两个数也写出来，一并对账；
+#   - 跳过 `target/` 与 `tmp/` 里的拷贝 —— 构建产物和反证沙箱各有一整份测试树，
+#     计进去数字直接翻倍，而翻倍看起来"更像真的"，比少计更难发现。
+# 取不到即 FAIL：实测为 0、或文档里一处声明都没匹配到，都判本条失效 —— 与第 5/7/10 条
+# 同一反空洞口径（"没有输入"从来不是"通过"）。
+# 不参与对账的形状：`测试类 42→44` 这种 A→B 迁移句记的是"那一批从几抬到几"，是历史陈述，
+# 与"第 N 个门禁"同理永久为真。
+# 本条不钉 `管理端回归 101 条用例`：用例数要跑 mvn 才量得到，那是慢门禁
+# `check_admin_tests.sh` 的活（它判 `Tests run` 为正且 Failures/Errors/Skipped 为 0）。
+# ---------------------------------------------------------------------------
+TESTDOC_PATTERNS = ("README*.md", "CHANGELOG.md", "doc/XinSync-*.md")
+# 总数声明的三种书写形状。第三种是"把复跑命令原样抄进文档"的写法
+# （`find <各模块>/src/test/java -name '*Test.java' | wc -l` = 44），
+# 必须**同一行里出现 `*Test.java`** 才采信，否则会把 `git log … | wc -l` 的提交数抢过来判。
+TEST_CLASS_TOTAL_RES = (
+    ("中文计数", re.compile(r"(\d{1,4})\s*个\s*测试类")),
+    ("英文计数", re.compile(r"(\d{1,4})\s+(?:unit\s+)?test\s+classes?\b", re.I)),
+    ("复跑命令等号", re.compile(r"wc\s+-l`?\s*=\s*(\d{1,4})\b")),
+)
+TESTS_JAVA_CLAIM_RE = re.compile(r"(\d{1,4})\s*个\s*`?\*Tests\.java`?")
+HELPER_CLAIM_RE = re.compile(r"(\d{1,4})\s*个[^0-9\n]{0,12}工具类")
+# 逐模块口径：`admin 34 / core 6 / executor 2 / rpc 2`
+MODULE_PAIR_RE = re.compile(r"\b(admin|core|executor|rpc|assembly)\s+(\d{1,4})\b")
+
+
+def measure_test_classes(root):
+    """现场量各模块 `src/test/java` 下的 `*Test.java` 条数。返回 (dict, None) 或 (None, 原因)。"""
+    per_module = {}
+    total = suites = helpers = 0
+    for d in sorted((p for p in root.iterdir() if p.is_dir()), key=lambda p: p.name):
+        src = d / "src" / "test" / "java"
+        if not src.is_dir():
+            continue
+        n_test = n_suites = n_helper = 0
+        for p in src.rglob("*.java"):
+            if "target" in p.parts or "tmp" in p.parts:
+                continue
+            name = p.name
+            if name.endswith("Test.java"):
+                n_test += 1
+            elif name.endswith("Tests.java"):
+                n_suites += 1
+            else:
+                n_helper += 1
+        short = d.name[6:] if d.name.startswith("datax-") else d.name
+        per_module[short] = n_test
+        total += n_test
+        suites += n_suites
+        helpers += n_helper
+    if not per_module:
+        return None, u"一个带 `src/test/java` 的模块都没找到 —— 口径失配（目录结构变了？），量不了测试类条数"
+    if total == 0:
+        return None, u"实测 `*Test.java` 为 0 个，与仓库事实不符（模块目录或文件名口径变了），量不到就不许当通过"
+    return {"total": total, "per_module": per_module, "suites": suites, "helpers": helpers}, None
+
+
+def check_test_class_claims(root):
+    """第 11 条主判定：文档里的测试类数字 == 文件系统实测值。返回 (声明处数, 实测总数)。"""
+    measured, err = measure_test_classes(root)
+    if err:
+        fail(u"测试类条数量不出来：%s" % err)
+
+    docs = set()
+    for pat in TESTDOC_PATTERNS:
+        for p in root.glob(pat):
+            if not p.is_file():
+                continue
+            rel_parts = p.relative_to(root).parts
+            if "target" in rel_parts or "tmp" in rel_parts:
+                continue
+            docs.add(p)
+
+    claims = 0
+    module_claims = 0
+    for path in sorted(docs):
+        rel = path.relative_to(root).as_posix()
+        for lineno, line in enumerate(read(path).split("\n"), start=1):
+            if err:
+                break
+            for label, rx in TEST_CLASS_TOTAL_RES:
+                for hit in rx.finditer(line):
+                    if label == "复跑命令等号" and "*Test.java" not in line:
+                        continue
+                    claims += 1
+                    claimed = int(hit.group(1))
+                    if claimed != measured["total"]:
+                        fail(u"%s:%d 声明 %d 个测试类，但现场数各模块 `src/test/java` 下的 `*Test.java` "
+                             u"是 %d 个（复现：find <各模块>/src/test/java -name '*Test.java' | wc -l，"
+                             u"逐模块 %s）" % (rel, lineno, claimed, measured["total"],
+                                              u"、".join(u"%s %d" % (k, v)
+                                                         for k, v in sorted(measured["per_module"].items()))))
+            for rx, field, name in ((TESTS_JAVA_CLAIM_RE, "suites", u"*Tests.java"),
+                                    (HELPER_CLAIM_RE, "helpers", u"测试目录里的工具类")):
+                for hit in rx.finditer(line):
+                    claims += 1
+                    claimed = int(hit.group(1))
+                    if claimed != measured[field]:
+                        fail(u"%s:%d 声明 %d 个 %s，实测是 %d 个 —— 排除口径也要和文档一致"
+                             % (rel, lineno, claimed, name, measured[field]))
+            if ("src/test/java" in line or u"测试类" in line) and MODULE_PAIR_RE.search(line):
+                for mod, num in MODULE_PAIR_RE.findall(line):
+                    real = measured["per_module"].get(mod)
+                    claims += 1
+                    module_claims += 1
+                    if real is None:
+                        fail(u"%s:%d 声明了模块 `%s` 的测试类条数，但本仓库里没有这个模块的测试目录"
+                             % (rel, lineno, mod))
+                    elif real != int(num):
+                        fail(u"%s:%d 声明模块 %s 有 %s 个测试类，实测 %d 个"
+                             % (rel, lineno, mod, num, real))
+    if claims == 0:
+        fail(u"对外文档里一处测试类数量声明都没匹配到（README*/CHANGELOG.md/doc/XinSync-*.md）—— "
+             u"第 11 条没有输入，等于失效；要么数字被删了，要么书写形状变了")
+    # 反空洞守卫：只钉总数会把"漏掉一个模块"判成对 —— 实测 admin 34 占 44 里的 34，
+    # 真漏一个模块总数照样可能对上（例如同时新增/删除）。所以逐模块口径必须**有人在写**，
+    # 少于 2 条就是这条判据自己失效了（MODULE_PAIR_RE 形状一变就静默不解析，正是老毛病）。
+    if module_claims < 2:
+        fail(u"逐模块测试类口径一条都没解析出来（实测模块 %d 个：%s）—— "
+             u"只看总数会把漏掉的模块判成对，本条要求文档里至少写出 2 个模块的数字"
+             % (len(measured["per_module"]) if measured else 0,
+                u"、".join(u"%s %d" % (k, v) for k, v in sorted(measured["per_module"].items()))
+                if measured else u"量不到"))
+    return claims, (measured["total"] if measured else 0)
 
 
 failures = []
@@ -683,6 +824,9 @@ def main():
     # 第 10 条：对外"改动了多少"的数字，现场跑 git 按锚点重量
     stats_docs, stats_summary = check_stats_claims(ROOT)
 
+    # 第 11 条：对外"N 个测试类"的数字，现场数各模块 src/test/java 下的 *Test.java
+    test_claims, test_total = check_test_class_claims(ROOT)
+
     sys.stdout.write("扫描照做类文档 %d 份（围栏内命令行 %d 行），实际门禁 %d 个\n"
                      % (len(howto), blocks_total, actual))
     for note in notes[:5]:
@@ -696,18 +840,20 @@ def main():
         for f in failures:
             sys.stdout.write("FAIL %s\n" % f)
         sys.stdout.write("FAIL: 对外文档有 %d 处不合格（照做必失败的路径/命令、损坏的表格行，"
-                         "或对不上 git 实测的改动数字）\n" % len(failures))
+                         "或对不上实测的改动/测试类数字）\n" % len(failures))
         return 1
     sys.stdout.write("PASS: 照做类文档 %d 份、%d 行命令行全部指向仓库里真实存在的路径；"
                      "门禁条数三方一致（实际 %d / MIN_GATES %s / 文档声明与表格 %s）；"
                      "交付文档 %d 份、%d 个表格行全部在同一行闭合；"
-                     "改动数字 %d 份文档共 %d 处声明与 git 按锚点实测一致（锚点 %s，起点 tag `%s`）\n"
+                     "改动数字 %d 份文档共 %d 处声明与 git 按锚点实测一致（锚点 %s，起点 tag `%s`）；"
+                     "测试类数字 %d 处声明与文件系统实测一致（共 %d 个 `*Test.java`）\n"
                      % (len(howto), blocks_total, actual, declared_min,
                         "一致" if not any(c[2] not in (None, actual) for c in claims) else "见上",
                         len(table_files), table_rows,
                         stats_docs, sum(int(s.split(":")[1]) for s in stats_summary),
                         "、".join(sorted(set(s.split(":")[0] for s in stats_summary))) or "无",
-                        STATS_REF))
+                        STATS_REF,
+                        test_claims, test_total))
     return 0
 
 
