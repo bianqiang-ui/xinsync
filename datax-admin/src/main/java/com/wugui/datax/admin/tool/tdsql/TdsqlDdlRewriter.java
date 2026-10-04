@@ -823,6 +823,48 @@ public final class TdsqlDdlRewriter {
         return false;
     }
 
+    /**
+     * 取这条 `CREATE TABLE` 的表名（去掉反引号与 `库名.` 前缀）；解析不出来返回 null。
+     *
+     * 公开的唯一理由：调用方要判"这条规则说的表和这段 DDL 是不是同一张表"。
+     * 这件事必须在改写器这一份口径上做 —— 另写一个表名解析器就会出现
+     * "改写器认为的表名"与"校验器认为的表名"不一致，而那种不一致是静默的。
+     * 只认 `entryProblem` 认可的那种输入（单条 CREATE TABLE），其余一律 null。
+     */
+    public static String tableNameOf(String createDdl) {
+        if (createDdl == null || entryProblem(createDdl) != null) {
+            return null;
+        }
+        int head = firstContent(createDdl, 0);
+        int idx = firstContent(createDdl, head + "CREATE".length());
+        if (startsWithKeywordAt(createDdl, idx, "TEMPORARY")) {
+            idx = firstContent(createDdl, idx + "TEMPORARY".length());
+        }
+        if (!startsWithKeywordAt(createDdl, idx, "TABLE")) {
+            return null;
+        }
+        int nameAt = firstContent(createDdl, idx + "TABLE".length());
+        if (nameAt < 0) {
+            return null;
+        }
+        String token = trimIdentifier(createDdl.substring(nameAt, wordEnd(createDdl, nameAt)));
+        if (token == null || token.isEmpty()) {
+            return null;
+        }
+        String plain = token.replace("`", "");
+        int dot = plain.lastIndexOf('.');
+        if (dot >= 0) {
+            plain = plain.substring(dot + 1);
+        }
+        // 表名只能是裸标识符：`IF`、`(`、引号残留这些都说明定位落错了，宁可返回 null 也不给假名
+        for (int i = 0; i < plain.length(); i++) {
+            if (!isWordChar(plain.charAt(i))) {
+                return null;
+            }
+        }
+        return plain.isEmpty() ? null : plain;
+    }
+
     private static String trimIdentifier(String s) {
         if (s == null) {
             return null;

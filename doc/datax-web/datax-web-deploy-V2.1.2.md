@@ -15,7 +15,7 @@
 
 ## 2. 建库
 
-脚本位置是 **`bin/db/datax_web.sql`**（V2.1.1 文档写的 `doc/db/datax_web.sql` 在本仓库不存在）。共 **12 张表**，导入后请核对表数量，部分表对 MySQL 版本敏感。
+脚本位置是 **`bin/db/datax_web.sql`**（V2.1.1 文档写的 `doc/db/datax_web.sql` 在本仓库不存在）。共 **13 张表**，导入后请核对表数量，部分表对 MySQL 版本敏感。
 
 初始账号：**admin / 123456**。
 

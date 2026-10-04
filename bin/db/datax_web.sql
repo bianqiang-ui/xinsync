@@ -356,3 +356,32 @@ CHANGE COLUMN `author` `user_id` INT(11) NOT NULL COMMENT '修改用户' ;
 
 ALTER TABLE `job_info`
 CHANGE COLUMN `increment_type` `increment_type` TINYINT(4) NULL DEFAULT 0 COMMENT '增量类型' ;
+
+
+-- ----------------------------
+-- Table structure for tdsql_shard_rule
+-- TDSQL 分片规则表：①导入、②DDL 生成、③SQL 改造三个能力共用这一份规则（单一真相源）。
+-- 与上面那些运行期表刻意不同：这里用 CREATE TABLE IF NOT EXISTS，并且不带删表语句。
+-- 原因是这张表存的是用户配置——本脚本被重复执行（重装、修环境）时，
+-- 删表会把已录入的分片规则整片清空，而清空一次就会让 DDL 生成静默退回「没有规则」。
+-- ----------------------------
+CREATE TABLE IF NOT EXISTS `tdsql_shard_rule`  (
+  `id` int(11) NOT NULL AUTO_INCREMENT COMMENT '主键',
+  `datasource_id` bigint(20) NOT NULL COMMENT '目标 TDSQL 数据源 id（job_jdbc_datasource.id）',
+  `logic_db` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '逻辑库名',
+  `logic_table` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '逻辑表名',
+  `table_type` varchar(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '表类型：SHARD 分片表 / BROADCAST 广播表 / SINGLE 单表',
+  `shard_key` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT NULL COMMENT '分片键列名，仅 SHARD 必填',
+  `shard_num` int(11) NULL DEFAULT NULL COMMENT '分片数，仅 SHARD 必填；只作记录，平台内不据此算路由',
+  `pk_columns` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT NULL COMMENT '改造前主键列快照，逗号分隔',
+  `uk_columns` varchar(500) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT NULL COMMENT '改造前唯一索引列快照，索引间用分号分隔',
+  `auto_increment_col` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT NULL COMMENT '自增列名，需配 sequence',
+  `sequence_name` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT NULL COMMENT 'TDSQL_SEQUENCE 名称',
+  `source_datasource_id` bigint(20) NULL DEFAULT NULL COMMENT '来源数据源 id（①的来源侧）',
+  `source_table` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT NULL COMMENT '来源表名',
+  `enabled` tinyint(4) NOT NULL DEFAULT 1 COMMENT '是否启用：0 停用 1 启用',
+  `create_time` datetime(0) NULL DEFAULT CURRENT_TIMESTAMP(0) COMMENT '创建时间',
+  `update_time` datetime(0) NULL DEFAULT CURRENT_TIMESTAMP(0) ON UPDATE CURRENT_TIMESTAMP(0) COMMENT '更新时间',
+  PRIMARY KEY (`id`) USING BTREE,
+  UNIQUE INDEX `uk_tdsql_rule_logic_table`(`logic_db`, `logic_table`) USING BTREE
+) ENGINE = InnoDB AUTO_INCREMENT = 1 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci ROW_FORMAT = Dynamic COMMENT = 'TDSQL 分片规则（单一真相源）';

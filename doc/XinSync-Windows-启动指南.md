@@ -51,7 +51,7 @@ SOURCE <仓库根目录>/bin/db/datax_web.sql;
 
 -- 3. 验证
 SHOW TABLES;
--- 应该有 12 张表
+-- 应该有 13 张表（等于 bin/db/datax_web.sql 里 CREATE TABLE 的条数）
 ```
 
 初始管理员账号：**admin / 123456**
