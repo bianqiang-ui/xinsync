@@ -140,6 +140,8 @@ public class JobAdminConfig implements InitializingBean, DisposableBean {
     private JobDatasourceMapper jobDatasourceMapper;
     @Resource
     private JobUserMapper jobUserMapper;
+    @Resource
+    private TdsqlShardRuleMapper tdsqlShardRuleMapper;
 
     public String getI18n() {
         return i18n;
@@ -183,6 +185,10 @@ public class JobAdminConfig implements InitializingBean, DisposableBean {
 
     public JobGroupMapper getJobGroupMapper() {
         return jobGroupMapper;
+    }
+
+    public TdsqlShardRuleMapper getTdsqlShardRuleMapper() {
+        return tdsqlShardRuleMapper;
     }
 
     public JobLogReportMapper getJobLogReportMapper() {

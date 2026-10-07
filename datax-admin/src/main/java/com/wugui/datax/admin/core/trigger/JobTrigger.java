@@ -14,9 +14,12 @@ import com.wugui.datax.admin.entity.JobDatasource;
 import com.wugui.datax.admin.entity.JobGroup;
 import com.wugui.datax.admin.entity.JobInfo;
 import com.wugui.datax.admin.entity.JobLog;
+import com.wugui.datax.admin.entity.TdsqlShardRule;
 import com.wugui.datax.admin.tool.datax.DsSecretPlaceholder;
 import com.wugui.datax.admin.tool.query.BaseQueryTool;
 import com.wugui.datax.admin.tool.query.QueryToolFactory;
+import com.wugui.datax.admin.tool.tdsql.TdsqlShardDispatch;
+import com.wugui.datax.admin.tool.tdsql.TdsqlShardSlicer;
 import com.wugui.datax.admin.util.JSONUtils;
 import com.wugui.datax.rpc.util.IpUtil;
 import com.wugui.datax.rpc.util.SensitiveLogMask;
@@ -87,14 +90,26 @@ public class JobTrigger {
         if (ExecutorRouteStrategyEnum.SHARDING_BROADCAST == ExecutorRouteStrategyEnum.match(jobInfo.getExecutorRouteStrategy(), null)
                 && group.getRegistryList() != null && !group.getRegistryList().isEmpty()
                 && shardingParam == null) {
-            for (int i = 0; i < group.getRegistryList().size(); i++) {
-                processTrigger(group, jobInfo, finalFailRetryCount, triggerType, i, group.getRegistryList().size());
+            // 批次16（T2-B）：BEAN 任务 + 目标表配了启用的 SHARD 规则时，把规则传进
+            // processTrigger，每个分片现场切出自己那份 jobJson（AND (pk % total) = index）。
+            // 取不到规则（老任务/未配置/BROADCAST/SINGLE/手工分片）→ sliceRule 保持 null，
+            // 维持既有行为（N 份全量）——接线层绝不因"没配规则"改变任务成败（施工单红线3/4）。
+            TdsqlShardRule sliceRule = null;
+            int broadcastTotal = group.getRegistryList().size();
+            if (jobInfo.getJobJson() != null) {
+                TdsqlShardRule rule = TdsqlShardDispatch.findSlicableRule(jobInfo.getJobJson(), jobInfo.getGlueType());
+                if (TdsqlShardDispatch.isShardRule(rule)) {
+                    sliceRule = rule;
+                }
+            }
+            for (int i = 0; i < broadcastTotal; i++) {
+                processTrigger(group, jobInfo, finalFailRetryCount, triggerType, i, broadcastTotal, sliceRule);
             }
         } else {
             if (shardingParam == null) {
                 shardingParam = new int[]{0, 1};
             }
-            processTrigger(group, jobInfo, finalFailRetryCount, triggerType, shardingParam[0], shardingParam[1]);
+            processTrigger(group, jobInfo, finalFailRetryCount, triggerType, shardingParam[0], shardingParam[1], null);
         }
 
     }
@@ -139,8 +154,11 @@ public class JobTrigger {
      * @param triggerType
      * @param index               sharding index
      * @param total               sharding index
+     * @param sliceRule           批次16（T2-B）：非 null 时按该规则把 jobJson 切成本分片的一份
+     *                            （仅 SHARDING_BROADCAST 且目标表配了启用 SHARD 规则才非 null；
+     *                            null = 原样下发，保持既有语义）
      */
-    private static void processTrigger(JobGroup group, JobInfo jobInfo, int finalFailRetryCount, TriggerTypeEnum triggerType, int index, int total) {
+    private static void processTrigger(JobGroup group, JobInfo jobInfo, int finalFailRetryCount, TriggerTypeEnum triggerType, int index, int total, TdsqlShardRule sliceRule) {
 
         TriggerParam triggerParam = new TriggerParam();
 
@@ -176,7 +194,25 @@ public class JobTrigger {
         triggerParam.setGlueUpdatetime(jobInfo.getGlueUpdatetime().getTime());
         triggerParam.setBroadcastIndex(index);
         triggerParam.setBroadcastTotal(total);
-        triggerParam.setJobJson(jobInfo.getJobJson());
+        // 批次16（T2-B）：sliceRule 非 null（SHARDING_BROADCAST + 启用的 SHARD 规则）时，
+        // 每个分片现场切出自己那份 jobJson（AND (pk % total) = index 追加进 reader.where）；
+        // null 时原样下发（N 份全量的既有语义）。切片失败绝不静默回退全量——那等于把"分了片"
+        // 的表象留给用户、实际每片都在跑全量，重复写比失败更难查；失败记 trigger 日志并中止该片。
+        if (sliceRule != null) {
+            try {
+                triggerParam.setJobJson(TdsqlShardSlicer.slice(jobInfo.getJobJson(), sliceRule, index, total));
+            } catch (IllegalArgumentException e) {
+                String reason = "分片切片失败，本片未下发（index=" + index + "/" + total + "）：" + e.getMessage();
+                logger.error(">>>>>>>>>>> datax-web, shard slice fail, jobId = {}, {}", jobInfo.getId(), reason);
+                jobLog.setTriggerCode(ReturnT.FAIL_CODE);
+                jobLog.setTriggerMsg(I18nUtil.getString("jobconf_trigger_type") + "：" + triggerType.getTitle()
+                        + "<br>" + reason);
+                JobAdminConfig.getAdminConfig().getJobLogMapper().updateTriggerInfo(jobLog);
+                return;
+            }
+        } else {
+            triggerParam.setJobJson(jobInfo.getJobJson());
+        }
 
         //increment parameter
         Integer incrementType = jobInfo.getIncrementType();

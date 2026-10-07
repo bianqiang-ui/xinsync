@@ -159,7 +159,7 @@
 - 门禁判据的三条元规则：发现方式是递归 `find`（glob 静默失配会假绿）、数量下限 `MIN_GATES` 等于实际条数
   （删门禁必须当场红灯）、`SKIP_MVN_GATES` 的结果是 PARTIAL 且退出码非 0（部分复跑不得冒充全绿）
 - Shell 脚本统一 LF 换行符（`.gitattributes` 强制）
-- 47 个测试类；管理端回归 112 条用例，core/executor/tdsql/临时文件/遮蔽/RPC 令牌/登录请求体各条链路都有行为用例
+- 49 个测试类；管理端回归 129 条用例，core/executor/tdsql/临时文件/遮蔽/RPC 令牌/登录请求体/分片切片各条链路都有行为用例
 - 门禁入口随仓库交付：`bash devops/fork-workflow.sh recheck` 一条命令复跑全部 16 道门禁
 - Docker 镜像 `maven:3.8-openjdk-8` 仅用作**构建与验证环境**（本仓库不提供 Dockerfile / docker-compose，
   README 里原来的 "Docker 部署" 步骤照做必失败，已删除并如实说明）
@@ -256,7 +256,7 @@
 - **钉三类数字，口径只有一份实现**（`measure_test_classes()`）：各模块 `src/test/java` 下递归的
   `*Test.java` 条数。模块**按"顶层目录里真有 `src/test/java`"自动发现**，不写死清单 ——
   写死了新增模块会静默漏计。它比的值永远是**当场量到的那一个**，所以文档里的条数只能跟着仓库走：
-  共 **47 个测试类**，逐模块 admin 37 / core 6 / executor 2 / rpc 2；不计 1 个 `*Tests.java`
+  共 **49 个测试类**，逐模块 admin 39 / core 6 / executor 2 / rpc 2；不计 1 个 `*Tests.java`
   与 4 个放在测试目录里的工具类，这两个排除口径文档里写了也同样对账。
 - **三点边界写在判据里**：跳过 `target/` 与 `tmp/` 里的拷贝（构建产物和反证沙箱各有一整份测试树，
   计进去数字直接翻倍，而"翻倍"看起来比"少一个"更像真的）；`… | wc -l` = N 这种"把复跑命令抄进文档"
@@ -397,6 +397,47 @@ i18n 不在 jar 内，而在 `conf/i18n/` 下（`src/main/assembly/deploy.xml` �
 
 批次14 的措辞继续适用：能生成改写产物、能落库、能重放，**还没有**接进调度的执行链，
 所以对外仍按"离线可用的规则与产物生成"讲，不讲"已自动改造"。
+
+### 🧩 批次16 — 2026-10-07 分片广播接真分片（T2-B：每片一份 jobJson）
+
+**问题**：`SHARDING_BROADCAST` 历史上把同一份静态 `job_json` 发给每个执行器 —— DataX 任务选
+分片广播等于**在一张表上跑 N 份完整全量**（重复写 + 假分片）。`broadcastIndex/Total` 只有
+GLUE 脚本消费，`ExecutorJobHandler` 与 `BuildCommand` 从不读它们。
+
+**切片口径（红线先行）**：
+
+1. **只做来源侧切片**：reader.where 追加 `AND (pk % total) = index`（pk 取规则
+   `pk_columns` 快照第一列，过 `SqlSafeIdentifier` 闸口）。**绝不实现目标侧路由**——
+   `hash(shardkey)%N` 算物理分片是 TDSQL 内核的事，自研路由 = 错误数据发生器；
+   写入仍按逻辑表进 proxy，由内核落分片。来源侧"我们的数据怎么分批搬"与内核路由正交。
+2. **querySql 自由文本显式拒绝**：改写别人的 SQL = 静默错误源，报错优于猜测（口径同改写器）。
+3. **无规则 = 现状行为**：`TdsqlShardDispatch.findSlicableRule` 的所有"切不了"
+   （GLUE 任务 / 老密文无占位符 / 目标非 TDSQL / 规则缺如·停用·多条 / 表名不符）一律返回
+   null，触发链路原样下发 N 份全量——**没配规则的老任务零感知**；绝不把"没配规则"
+   升级成任务失败，也绝不静默回退切片（切片失败 = 该片记 trigger 失败日志并中止，
+   不给"看起来分了片、实际每片全量"的表象）。
+4. **规则类型必须是 SHARD**：BROADCAST/SINGLE 的切片语义未定义，拒绝。
+
+**实现**：`TdsqlShardSlicer`（纯函数：jobJson+规则+index/total → 切片 jobJson；fastjson
+深解析，writer/settings 原样）、`TdsqlShardDispatch`（接线层：从 writer 侧
+`@@DATAX_DS_USER/PWD:<id>@@` 占位符解出目标数据源 → 判 `datasource=tdsql` → 按
+(datasource_id, logic_db, logic_table) 取唯一启用规则）、`JobTrigger`（`processTrigger`
+新增 `sliceRule` 参数，广播分支解析一次、每片现场切片；手工分片路径显式传 null）。
+执行器与 BuildCommand **零改动**——每片仍是一次普通 DataX 进程，部署面无感。
+
+**验证**：第 17 道门禁 `check_shard_slice.sh`（形状：Slicer 唯一实现 + JobTrigger 唯一接线 +
+main 源码无目标侧路由特征 + querySql 拒绝分支 + 无规则回退分支；行为：切片单测登记进回归名单）；
+`TdsqlShardSlicerTest`（每片取模条件、where 两条拼接路径、writer 侧不动、querySql/多表/表名
+不符/无 pkColumns/越界 index 拒绝）+ `TdsqlShardDispatchTest`（占位符解构、类型判定、
+无占位符 = 不可切片）。门禁 16→17，`MIN_GATES` 与两份 README、CHANGELOG 同步。
+门禁反证 4 腿全成立（querySql 判据失效 / 注入 hashCode 取模路由 / 手工分片回退被删 /
+切片单测退出名单 → 各自改坏即红且点名 → 还原逐字节一致 → 复跑回绿），
+其中"任意命名的取模路由函数"实测绕开了第一版按字段名匹配的正则，判据据此加了
+`hashCode()%` 与路由命名两组特征（`tmp/evidence/falsify-shard-slice-b16-summary.txt`）。
+
+**诚实边界**：切片正确性目前由离线单测 + 门禁反证保证；**真实 TDSQL 集群上的端到端对照**
+（切片后总行数 = 全量行数、无重复无遗漏）仍属"未实测清单"，与 T1 同挂——不因本批宣布
+② 分库分表"已完成"。
 
 ### 📊 统计（相对上游 v2.1.2 发布点 tag `v-2.1.2`，对账锚点 `67c1004`，实测值）
 

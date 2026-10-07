@@ -54,13 +54,18 @@
 #      （Tomcat 线程跨请求复用，漏一次就把下一位的 token 从 24 小时抬成 7 天），
 #      以及 1/0 与 true/false 两种形状都照常可登（反向红线：修 bug 不许把装机 UI 的登录改坏）。
 #
+#  15) TdsqlShardSlicerTest + TdsqlShardDispatchTest —— 批次16（T2-B）分片广播切片链路：
+#      每片一份 jobJson 的纯函数判据（querySql 拒绝/表名核对/pkColumns 不猜/where 两条拼接路径/
+#      分片号边界），接线层的占位符解构与规则类型判定（BROADCAST/SINGLE/停用规则一律不切）。
+#      形状判据（唯一实现/唯一接线/无目标侧路由/无规则回退现状）由 check_shard_slice.sh 守。
+#
 # 判定标准与 TDSQL 门禁完全一致（同一个 lib）：测试没被编译/没跑起来，本身就判失败。
 set -u
 
 cd "$(dirname "$0")/../.." || exit 1
 . devops/checks/lib_mvn_test_gate.sh
 
-GATE_TESTS="JobDatasourceControllerUpdateTest,JobScheduleHelperMisfireLogTest,BaseQueryToolMaxIdTest,AccessControlTest,JobServiceBatchAddOwnerTest,SqlSafeIdentifierTest,BaseFormOrderByWhitelistTest,JobLogControllerOwnershipTest,JwtAuthFailurePathTest,OwnerStampNullSafeTest,JobServiceUpdateParamTest,JobDatasourceSecretScrubTest,DsSecretPlaceholderTest,GlueScriptAccessTest,JwtLoginBodyTest"
+GATE_TESTS="JobDatasourceControllerUpdateTest,JobScheduleHelperMisfireLogTest,BaseQueryToolMaxIdTest,AccessControlTest,JobServiceBatchAddOwnerTest,SqlSafeIdentifierTest,BaseFormOrderByWhitelistTest,JobLogControllerOwnershipTest,JwtAuthFailurePathTest,OwnerStampNullSafeTest,JobServiceUpdateParamTest,JobDatasourceSecretScrubTest,DsSecretPlaceholderTest,GlueScriptAccessTest,JwtLoginBodyTest,TdsqlShardSlicerTest,TdsqlShardDispatchTest"
 
 # 上游自带的测试类大多要连真库/真服务，在这个 fork 的门禁环境里跑不了。
 # 但"新写了一个 *Test 却没进任何名单"必须当场 FAIL —— 否则门禁名单会变成静默漏跑的黑名单，
