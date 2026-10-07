@@ -32,7 +32,7 @@ The upstream project stopped being maintained in June 2024 with 180+ open issues
 > - 🔒 Fixed **15 security vulnerabilities** (5 of them CRITICAL) — RPC deserialization RCE, IDOR, command injection, Log4Shell, GLUE script RCE
 > - 🛡️ **33 authorization seams** verified one by one by a gate script (single `AccessControl` implementation, ownership always read back from the DB row)
 > - ✅ Long-standing community issues closed: #487 orphan process tree, #296 Hive connection, #389 scheduler stalls, #265 HBase datasource, and more
-> - 🏗️ **17 automated security gates** — one command to re-run everything, zero silent regression
+> - 🏗️ **18 automated security gates** — one command to re-run everything, zero silent regression
 > - 📝 Every batch ships with measured evidence and falsification records, written into the **CHANGELOG**
 >   and the corresponding commit messages (the round-by-round working ledger and technical manual are
 >   process documents and are not published with the repository)
@@ -101,7 +101,7 @@ graph TB
 | **Credential Protection** | API returns credential material | Full chain: API mask / job_json stores references only / logs and RPC exits masked / temp files created 0600 |
 | **Dependency Safety** | Log4j2 2.11.2, Logback 1.2.3, … | Log4j2 2.17.2 / Logback 1.2.13 / Fastjson 1.2.83 / Netty 4.1.100.Final locked in the root POM |
 | **Domestic DB Support** | None | TDSQL datasource seam + DDL rewriting (shardkey / primary key / indexes) |
-| **Quality Gates** | None | 17 automated security gates, reproducible verification |
+| **Quality Gates** | None | 18 automated security gates, reproducible verification |
 
 ---
 
@@ -136,7 +136,7 @@ graph TB
 
 ### 🛡️ Automated Security Gate System
 
-**17 automated security gates** ship inside the repository, so any change — including a fresh clone — can be re-verified with one command:
+**18 automated security gates** ship inside the repository, so any change — including a fresh clone — can be re-verified with one command:
 
 ```bash
 bash devops/fork-workflow.sh recheck
@@ -161,6 +161,7 @@ bash devops/fork-workflow.sh recheck
 | `devops/checks/check_tdsql.sh` | TDSQL DDL rewriting tests really run |
 | `devops/checks/check_sql_replay.py` | The import SQL can be replayed against the same database: every table is either dropped-and-recreated or created `IF NOT EXISTS`; the user-config table is never dropped and never re-seeded by a plain INSERT |
 | `devops/checks/check_shard_slice.sh` | Sharding-broadcast slicing pipeline (T2-B): single slicer implementation + single JobTrigger wiring + no target-side routing (shard routing stays inside TDSQL) + querySql refuses slicing + fallback to legacy behavior without a rule; slice tests must be registered in the regression gate |
+| `devops/checks/check_datacheck_seam.sh` | Open-source seam of the consistency check (pair validation / common tables / per-table counts / checksum template) + closed-source isolation red line (no closed-source coordinates inside the public repo, no self-built JDBC connections) |
 
 > Gate judging is deliberately strict: the Maven-backed gates require a positive `Tests run` with
 > `Failures: 0, Errors: 0, Skipped: 0`; the static gates come with falsification records

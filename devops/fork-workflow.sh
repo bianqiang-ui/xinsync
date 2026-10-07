@@ -9,7 +9,7 @@
 #   bash devops/fork-workflow.sh recheck     # 自动发现并复跑 devops/checks 下全部 check_* 门禁 + shell 语法
 #                                           # 加速：SKIP_MVN_GATES=1 只跑配置/语法类门禁，结果是 PARTIAL 且退出码非 0；
 #                                           #       只想快速过一遍语法时再叠加 GATE_ALLOW_PARTIAL=1 才返回 0
-#                                           # 门禁数量下限：MIN_GATES=N（默认 17），发现数不足直接 FAIL
+#                                           # 门禁数量下限：MIN_GATES=N（默认 18），发现数不足直接 FAIL
 #
 # 从外层工作台 tools/fork-workflow.sh 搬进仓库（2026-10-03，#38）。搬进来的理由不是"顺手整理目录"：
 # README 与 docs/ 里对外写着 `bash tools/fork-workflow.sh recheck`，而 tools/ 在仓库外 ——
@@ -151,12 +151,12 @@ cmd_recheck() {
   #      （上一版 ls 用 glob 过滤，check_authz_seams.bak 这种文件会直接消失）；
   #      __pycache__ 里的 .pyc 是 python 自动产物，同名的 .py 已被扫到，这里显式排除；
   #   3) 门禁数量下限 MIN_GATES：devops/checks 被误删/改名时，"发现 0 个" 不该是好消息。
-  #      下限跟着实际门禁数走（当前 17 条）：**加一条门禁必须同时把这里抬上去**，
+  #      下限跟着实际门禁数走（当前 18 条）：**加一条门禁必须同时把这里抬上去**，
   #      否则"新增 9 条、被人无声删掉 3 条"依旧能报全绿。下限写在代码里而不是文档里，
   #      是为了让漏改在 recheck 当场变红灯，而不是等下一轮复核才发现。
   local -a gates=()
   local g name rc
-  local min_gates="${MIN_GATES:-17}"
+  local min_gates="${MIN_GATES:-18}"
   while IFS= read -r g; do
     [ -n "$g" ] || continue
     case "$g" in

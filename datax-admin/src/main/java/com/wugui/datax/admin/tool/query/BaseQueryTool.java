@@ -324,8 +324,10 @@ public abstract class BaseQueryTool implements QueryToolInterface {
         return res;
     }
 
-    //获取指定表的主键，可能是多个，所以用list
-    private List<String> getPrimaryKeys(String tableName) {
+    //获取指定表的主键，可能是多个，所以用list。
+    //批次 17 起升为 public：闭源比对引擎（授权交付件）取主键元数据也走这里，
+    //它不自带 JDBC/凭据解密 —— 平台元数据只留一个口径。
+    public List<String> getPrimaryKeys(String tableName) {
         List<String> res = Lists.newArrayList();
         String sqlQueryPrimaryKey = sqlBuilder.getSQLQueryPrimaryKey();
         try {
@@ -573,6 +575,31 @@ public abstract class BaseQueryTool implements QueryToolInterface {
 
     private String getSQLMaxID(String tableName, String primaryKey) {
         return sqlBuilder.getMaxId(tableName, primaryKey);
+    }
+
+    /**
+     * 精确行数：SELECT COUNT(*)。与 getMaxIdVal 同一条教训 —— 取不到必须抛，
+     * 返回 0 会让调用方把"查不到"当成"空表"（比对报告会把差异算错）。
+     * 批次17 起供一致性比对的公开侧原语使用（闭源引擎也走这里，不自带 JDBC）。
+     */
+    public long countTable(String tableName) {
+        checkIdentifier(tableName, "表名");
+        Statement stmt = null;
+        ResultSet rs = null;
+        try {
+            stmt = connection.createStatement();
+            rs = stmt.executeQuery("SELECT COUNT(*) FROM " + tableName);
+            if (!rs.next()) {
+                throw new IllegalStateException("行数查询没有返回结果行，table = " + tableName);
+            }
+            return rs.getLong(1);
+        } catch (SQLException e) {
+            logger.error("[countTable Exception] --> the exception message is: {}", e.getMessage());
+            throw new IllegalStateException("行数查询失败，table = " + tableName + "：" + e.getMessage(), e);
+        } finally {
+            JdbcUtils.close(rs);
+            JdbcUtils.close(stmt);
+        }
     }
 
     public void executeCreateTableSql(String querySql) {

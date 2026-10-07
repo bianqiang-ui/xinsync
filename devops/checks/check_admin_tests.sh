@@ -65,7 +65,7 @@ set -u
 cd "$(dirname "$0")/../.." || exit 1
 . devops/checks/lib_mvn_test_gate.sh
 
-GATE_TESTS="JobDatasourceControllerUpdateTest,JobScheduleHelperMisfireLogTest,BaseQueryToolMaxIdTest,AccessControlTest,JobServiceBatchAddOwnerTest,SqlSafeIdentifierTest,BaseFormOrderByWhitelistTest,JobLogControllerOwnershipTest,JwtAuthFailurePathTest,OwnerStampNullSafeTest,JobServiceUpdateParamTest,JobDatasourceSecretScrubTest,DsSecretPlaceholderTest,GlueScriptAccessTest,JwtLoginBodyTest,TdsqlShardSlicerTest,TdsqlShardDispatchTest"
+GATE_TESTS="JobDatasourceControllerUpdateTest,JobScheduleHelperMisfireLogTest,BaseQueryToolMaxIdTest,AccessControlTest,JobServiceBatchAddOwnerTest,SqlSafeIdentifierTest,BaseFormOrderByWhitelistTest,JobLogControllerOwnershipTest,JwtAuthFailurePathTest,OwnerStampNullSafeTest,JobServiceUpdateParamTest,JobDatasourceSecretScrubTest,DsSecretPlaceholderTest,GlueScriptAccessTest,JwtLoginBodyTest,TdsqlShardSlicerTest,TdsqlShardDispatchTest,BaseQueryToolCountTest,DataCheckSupportTest"
 
 # 上游自带的测试类大多要连真库/真服务，在这个 fork 的门禁环境里跑不了。
 # 但"新写了一个 *Test 却没进任何名单"必须当场 FAIL —— 否则门禁名单会变成静默漏跑的黑名单，
