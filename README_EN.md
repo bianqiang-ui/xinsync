@@ -4,7 +4,7 @@
 
 Security-Hardened Data Integration Platform for Domestic IT Innovation Ecosystem
 
-[![License MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/bianqiang-ui/xinsync/blob/master/LICENSE) [![Version](https://img.shields.io/badge/Version-2.1.2--xinsync-green.svg)](https://github.com/bianqiang-ui/xinsync/releases) ![JDK](https://img.shields.io/badge/JDK-1.8+-orange.svg) ![Spring Boot](https://img.shields.io/badge/Spring%20Boot-2.1.x-brightgreen.svg) ![Gates](https://img.shields.io/badge/Quality%20Gates-13-blueviolet.svg)
+[![License AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](https://github.com/bianqiang-ui/xinsync/blob/master/LICENSE) [![Version](https://img.shields.io/badge/Version-2.1.2--xinsync-green.svg)](https://github.com/bianqiang-ui/xinsync/releases) ![JDK](https://img.shields.io/badge/JDK-1.8+-orange.svg) ![Spring Boot](https://img.shields.io/badge/Spring%20Boot-2.1.x-brightgreen.svg) ![Gates](https://img.shields.io/badge/Quality%20Gates-13-blueviolet.svg)
 
 [中文](README.md) · [English](README_EN.md) · [GitHub](https://github.com/bianqiang-ui/xinsync) · [Gitee (China Mirror)](https://gitee.com/brian888/xinsync)
 
@@ -345,10 +345,14 @@ new seam or rule in `devops/checks/`. Then run `bash devops/fork-workflow.sh rec
 
 ## 📜 License
 
-This project is licensed under [MIT License](LICENSE).
+Current versions of this project are licensed under **[GNU AGPL-3.0](LICENSE)**.
 
-- Original: [WeiYe-Jing/datax-web](https://github.com/WeiYe-Jing/datax-web) © 2020 WeiYe
+- Original: [WeiYe-Jing/datax-web](https://github.com/WeiYe-Jing/datax-web) © 2020 WeiYe — the original MIT notice is preserved in [NOTICE](NOTICE) and [LICENSE-MIT-UPSTREAM](LICENSE-MIT-UPSTREAM) as required by the MIT license
 - Security Fork: [bianqiang-ui/xinsync](https://github.com/bianqiang-ui/xinsync) © 2026 Brian
+- Embedded xxl-rpc code is Apache-2.0 licensed; see [NOTICE](NOTICE) §3
+- Commercial licensing (closed-source add-ons and alternative licensing): contact the repository owner
+
+> Historical MIT versions remain valid under MIT; new versions since 2026-10 are AGPL-3.0.
 
 ---
 

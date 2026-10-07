@@ -1,3 +1,10 @@
+/*
+ * 源自 xuxueli/xxl-rpc（Apache License 2.0）。
+ * 版权与许可声明见仓库根目录 NOTICE 第 3 节；本文件的修改同样按
+ * Apache-2.0 与本仓库整体许可中较严格者对外提供。
+ * Original: Copyright 2015-2020 XiuXueletian (xuxueli)
+ */
+
 package com.wugui.datax.rpc.old.registry.impl.test;//package com.xxl.rpc.test;
 //
 //import com.xxl.rpc.registry.ServiceRegistry;

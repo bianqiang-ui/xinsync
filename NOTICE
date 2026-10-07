@@ -1,0 +1,77 @@
+# XinSync 信数通 — 第三方组件与上游许可声明 (NOTICE)
+
+本仓库基于 WeiYe-Jing/datax-web（v2.1.2）深度安全加固与功能扩展。
+本文件按许可证要求保留上游与第三方组件的版权与许可声明原文，并说明本仓库的许可结构。
+
+## 1. 本仓库许可结构
+
+- **当前版本**：以 **GNU AFFERO GENERAL PUBLIC LICENSE v3（AGPL-3.0）** 发布，详见仓库根目录 `LICENSE`。
+- **上游原许可**：DataX-Web v2.1.2 及之前版本以 **MIT License** 发布（见下方原文保留）。
+- **商业授权**：版权持有人另提供商业许可（闭源增值件与替代许可），联系仓库所有者获取。
+- 免责声明：除非适用法律要求或书面同意，本软件按"现状"提供，不附任何担保。
+
+## 2. 上游 DataX-Web 的 MIT License 原文（按 MIT 保留条款保留）
+
+```
+MIT License
+
+Copyright (c) 2020 WeiYe (Original DataX-Web)
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
+
+## 3. 内嵌第三方组件：xxl-rpc（Apache License 2.0）
+
+`datax-rpc` 模块源自 XiuXueletian（xuxueli）/xxl-rpc 项目代码（部分包名调整为
+`com.wugui.datax.rpc`，部分类裁剪或改写）。原始项目以 **Apache License 2.0** 授权：
+
+- 原项目：https://github.com/xuxueli/xxl-rpc
+- 许可证：Apache License 2.0（全文见 https://www.apache.org/licenses/LICENSE-2.0）
+
+依据 Apache License 2.0 第 4 条，对源自该项目的文件保留以下声明：
+
+```
+Copyright 2015-2020 XiuXueletian (xuxueli)
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+```
+
+**覆盖范围**：`datax-rpc` 模块内源自 xxl-rpc 的全部文件（`com.wugui.datax.rpc`
+包及其子包，含 `old/` 目录下的历史裁剪文件）。对这些源文件的修改同样以
+Apache-2.0 与本仓库整体许可中较严格者对外提供。
+
+## 4. 其他运行时依赖
+
+Maven 依赖树中的第三方组件（Netty、Log4j2、HikariCP、Fastjson 等）各自遵循其
+原始许可证（Apache-2.0 / MIT / EPL 等），以 Maven Central 分发的构件自带声明为准，
+本仓库未修改其源码，不重复罗列。
+
+---
+
+XinSync 信数通 · 2026

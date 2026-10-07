@@ -4,7 +4,7 @@
 
 信创生态下的企业级数据集成平台 · 基于 DataX 深度安全加固
 
-[![License MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/bianqiang-ui/xinsync/blob/master/LICENSE) [![Version](https://img.shields.io/badge/Version-2.1.2--xinsync-green.svg)](https://github.com/bianqiang-ui/xinsync/releases) ![JDK](https://img.shields.io/badge/JDK-1.8+-orange.svg) ![Spring Boot](https://img.shields.io/badge/Spring%20Boot-2.1.x-brightgreen.svg) ![Gates](https://img.shields.io/badge/Quality%20Gates-13-blueviolet.svg)
+[![License AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](https://github.com/bianqiang-ui/xinsync/blob/master/LICENSE) [![Version](https://img.shields.io/badge/Version-2.1.2--xinsync-green.svg)](https://github.com/bianqiang-ui/xinsync/releases) ![JDK](https://img.shields.io/badge/JDK-1.8+-orange.svg) ![Spring Boot](https://img.shields.io/badge/Spring%20Boot-2.1.x-brightgreen.svg) ![Gates](https://img.shields.io/badge/Quality%20Gates-13-blueviolet.svg)
 
 [中文](README.md) · [English](README_EN.md) · [GitHub](https://github.com/bianqiang-ui/xinsync) · [Gitee 国内镜像](https://gitee.com/brian888/xinsync)
 
@@ -362,12 +362,15 @@ chore:    构建/工具变更
 
 ## 📜 开源协议
 
-本项目基于 [MIT License](LICENSE) 开源。
+本项目当前版本以 **[GNU AGPL-3.0](LICENSE)** 发布。
 
-- 原始项目：[WeiYe-Jing/datax-web](https://github.com/WeiYe-Jing/datax-web) - 2020 WeiYe
+- 原始项目：[WeiYe-Jing/datax-web](https://github.com/WeiYe-Jing/datax-web) - 2020 WeiYe（原 MIT 声明按其保留条款存于 [NOTICE](NOTICE) 与 [LICENSE-MIT-UPSTREAM](LICENSE-MIT-UPSTREAM)）
 - 安全加固版：[bianqiang-ui/xinsync](https://github.com/bianqiang-ui/xinsync) - 2026 Brian
+- 内嵌 xxl-rpc 代码遵循 Apache-2.0，声明见 [NOTICE](NOTICE) 第 3 节
+- 商业授权（闭源增值件与替代许可）：联系仓库所有者
 
-> 本项目为 DataX-Web 的 Fork 安全增强版，遵循原项目 MIT 协议。感谢原作者及社区贡献者的工作！
+> 本项目为 DataX-Web 的 Fork 安全增强版。历史 MIT 版本继续按 MIT 有效；自 2026-10 起
+> 的新版本切换为 AGPL-3.0。感谢原作者及社区贡献者的工作！
 
 ---
 
