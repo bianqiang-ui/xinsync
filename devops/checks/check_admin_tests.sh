@@ -47,13 +47,20 @@
 #      要一个一个钉住 —— 上一版只接了 add/update。/jobcode/save 请求体里没有 glueType，
 #      类型只能取库里那一行。反向红线：BEAN 主流程与管理员自身的能力都必须照常可用。
 #
+#  14) JwtLoginBodyTest —— 登录请求体这一侧（批次15 运行期冒烟实测出来的两条）：
+#      rememberMe 传 true/false 时整份请求体读不进来，而 filter 把 IOException 咽了、return null，
+#      父类据此"没有完成认证"直接结束 —— 实测 HTTP 200 + Content-Length: 0，用户只看到登录没反应。
+#      现在必须走失败分支给出带 code 的可读身体；同时钉住"记住我"这个线程变量在成功/失败两头都清
+#      （Tomcat 线程跨请求复用，漏一次就把下一位的 token 从 24 小时抬成 7 天），
+#      以及 1/0 与 true/false 两种形状都照常可登（反向红线：修 bug 不许把装机 UI 的登录改坏）。
+#
 # 判定标准与 TDSQL 门禁完全一致（同一个 lib）：测试没被编译/没跑起来，本身就判失败。
 set -u
 
 cd "$(dirname "$0")/../.." || exit 1
 . devops/checks/lib_mvn_test_gate.sh
 
-GATE_TESTS="JobDatasourceControllerUpdateTest,JobScheduleHelperMisfireLogTest,BaseQueryToolMaxIdTest,AccessControlTest,JobServiceBatchAddOwnerTest,SqlSafeIdentifierTest,BaseFormOrderByWhitelistTest,JobLogControllerOwnershipTest,JwtAuthFailurePathTest,OwnerStampNullSafeTest,JobServiceUpdateParamTest,JobDatasourceSecretScrubTest,DsSecretPlaceholderTest,GlueScriptAccessTest"
+GATE_TESTS="JobDatasourceControllerUpdateTest,JobScheduleHelperMisfireLogTest,BaseQueryToolMaxIdTest,AccessControlTest,JobServiceBatchAddOwnerTest,SqlSafeIdentifierTest,BaseFormOrderByWhitelistTest,JobLogControllerOwnershipTest,JwtAuthFailurePathTest,OwnerStampNullSafeTest,JobServiceUpdateParamTest,JobDatasourceSecretScrubTest,DsSecretPlaceholderTest,GlueScriptAccessTest,JwtLoginBodyTest"
 
 # 上游自带的测试类大多要连真库/真服务，在这个 fork 的门禁环境里跑不了。
 # 但"新写了一个 *Test 却没进任何名单"必须当场 FAIL —— 否则门禁名单会变成静默漏跑的黑名单，

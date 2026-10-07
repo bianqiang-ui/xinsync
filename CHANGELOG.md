@@ -159,8 +159,8 @@
 - 门禁判据的三条元规则：发现方式是递归 `find`（glob 静默失配会假绿）、数量下限 `MIN_GATES` 等于实际条数
   （删门禁必须当场红灯）、`SKIP_MVN_GATES` 的结果是 PARTIAL 且退出码非 0（部分复跑不得冒充全绿）
 - Shell 脚本统一 LF 换行符（`.gitattributes` 强制）
-- 46 个测试类；管理端回归 101 条用例，core/executor/tdsql/临时文件/遮蔽/RPC 令牌各条链路都有行为用例
-- 门禁入口随仓库交付：`bash devops/fork-workflow.sh recheck` 一条命令复跑全部 15 道门禁
+- 47 个测试类；管理端回归 112 条用例，core/executor/tdsql/临时文件/遮蔽/RPC 令牌/登录请求体各条链路都有行为用例
+- 门禁入口随仓库交付：`bash devops/fork-workflow.sh recheck` 一条命令复跑全部 16 道门禁
 - Docker 镜像 `maven:3.8-openjdk-8` 仅用作**构建与验证环境**（本仓库不提供 Dockerfile / docker-compose，
   README 里原来的 "Docker 部署" 步骤照做必失败，已删除并如实说明）
 - Assembly 打包输出 `packages/datax-admin_2.1.2_1.tar.gz`、`packages/datax-executor_2.1.2_1.tar.gz`、
@@ -256,7 +256,7 @@
 - **钉三类数字，口径只有一份实现**（`measure_test_classes()`）：各模块 `src/test/java` 下递归的
   `*Test.java` 条数。模块**按"顶层目录里真有 `src/test/java`"自动发现**，不写死清单 ——
   写死了新增模块会静默漏计。它比的值永远是**当场量到的那一个**，所以文档里的条数只能跟着仓库走：
-  共 **46 个测试类**，逐模块 admin 36 / core 6 / executor 2 / rpc 2；不计 1 个 `*Tests.java`
+  共 **47 个测试类**，逐模块 admin 37 / core 6 / executor 2 / rpc 2；不计 1 个 `*Tests.java`
   与 4 个放在测试目录里的工具类，这两个排除口径文档里写了也同样对账。
 - **三点边界写在判据里**：跳过 `target/` 与 `tmp/` 里的拷贝（构建产物和反证沙箱各有一整份测试树，
   计进去数字直接翻倍，而"翻倍"看起来比"少一个"更像真的）；`… | wc -l` = N 这种"把复跑命令抄进文档"
@@ -320,6 +320,83 @@
   仍然**无 TDSQL 实例验收**；"能导入 TDSQL / 分库分表 / 自动改造原程序代码"三件套里
   ②③都还没有端到端跑过真实例，不得称已完成。
 - 测试类 44→46；`check_tdsql.sh` 现在跑 47 条用例（改写器 22 / 生成器 15 / 读侧口径 10）。
+
+### 🐞 批次15 — 2026-10-04 建库脚本可重放 + 登录请求体的两条"静默失败"（收口 2026-10-07）
+
+这一批的起因是把批次14 的产物真正装起来跑一遍：`bin/db/datax_web.sql` 导进 MySQL 8、
+用交付的部署包起 admin、再打真 HTTP。两条缺陷都不是读代码读出来的 —— 单看形状什么都对
+（try/catch 在、字段在、token 也在），只有真发一次请求才知道"接住了异常"和"回答了客户端"
+是两件事。
+
+**一、第 16 道门禁 `devops/checks/check_sql_replay.py`（建库脚本必须可重放）**
+
+- 上游缺陷：`bin/db/datax_web.sql` 里 12 张建表只有 11 张配了 `DROP TABLE IF EXISTS`，
+  独独漏了 `job_project` —— 第二次导入同一份脚本时 `CREATE TABLE job_project` 撞 1050
+  报表已存在并中断。补的就是那一条 `DROP TABLE IF EXISTS \`job_project\`;`。
+  现状实测：13 张表 = 12 张先删再建 + 1 张刻意保留（`tdsql_shard_rule`）。
+- 门禁四条判据：① 除例外表外每张表都要有 `DROP TABLE IF EXISTS`（不带 IF EXISTS 也算红，
+  干净库第一遍就会中断）；② 重复执行不重建的表不许被裸 `INSERT`（第二遍插出重复出厂数据）；
+  ③ 例外表 `tdsql_shard_rule` 存用户配置，既不许被删、也要钉住它必须用
+  `CREATE TABLE IF NOT EXISTS` 这种例外写法；④ 解析器自证 —— 原文里的 `CREATE TABLE` 条数
+  与解析出来的条数对不上就红，一条都没解析出来也红（防"判据写在文件里但静默漏表"）。
+- 复跑证据：同一份脚本在 MySQL 8.0.12（主机版）与 8.0.46（容器版）连导两遍不中断，
+  第二遍 `tdsql_shard_rule` 的行数不变。
+
+**二、登录请求体这一侧的两条缺陷（`POST /api/auth/login`）**
+
+1. `LoginUser.rememberMe` 声明成 `Integer`，而客户端按 JSON 惯例传布尔量 `true/false`
+   时整份请求体读不进来；读进来失败那一支又 `return null`，`AbstractAuthenticationProcessingFilter`
+   把 null 解释成"子类还没走完"直接 return —— 客户端拿到 **HTTP 200 + Content-Length: 0**，
+   既没有 token 也没有原因，用户侧表现就是"点了登录没反应"。
+   - 修法分两处：字段改 `Boolean`，并且**装机 UI 原来的 `1/0` 写法必须继续可用**
+     （jackson-databind 2.9.10.6 的整数转布尔接住它，两种形状各有一条用例钉着）；
+     读不进来改为抛 `AuthenticationServiceException` 交给失败分支，写一个带原因的身体。
+   - HTTP 状态维持 200、失败信息放 body 的 `code`：装机前端的响应拦截器按 body 判失败，
+     改成 401 会让它走另一条分支、错误文案反而变空。
+2. `rememberMe` 挂在 Tomcat 工作线程上、只 set 不清：线程跨请求复用，上一位的"记住我 = 7 天"
+   会被下一位继承。与批次7 的 ShardingUtil 同一条口径，成功与失败两个出口都在 `finally` 里清；
+   成功出口的清理另有一条契约用例单独钉住（不靠邻居那行无条件 `set()` 顺带救）。
+3. 分档只到"请求体格式不对"为止：账号不存在与口令错仍是同一句话，登录接口不许变成账号枚举器。
+4. 日志只记异常类型，不记消息也不记栈：实测这一路 Jackson 的消息里只有
+   `[Source: (CoyoteInputStream); line: 1, column: 54]` 这样的定位、没有原文片段
+   （本轮 grep 过 `console.out`，明文口令命中 0 次）；但"有没有原文"取决于请求体以什么来源
+   喂进解析器 —— 换成先读成 `byte[]`/`String`（很常见的一次重构）就会带上出错位置附近的原文，
+   而那一栏的邻居就是 password。按最小面记。
+
+**三、文案退回层：配置层可以被单独留在旧版**
+
+跑 A/B 时先撞上的是自己这次的改动：换上重新构建的 jar、`conf/` 却还是旧包解出来的，坏体响应
+从"零字节"变成 12 字节的 `{"code":500}` —— 有状态码、一个字的理由都没有。原因在部署形状：
+i18n 不在 jar 内，而在 `conf/i18n/` 下（`src/main/assembly/deploy.xml` 的 fileSet +
+`bin/datax-admin.sh` 的 `CLASSPATH=lib/*:conf:.`），那是运维可编辑、也可被单独替换的外部文件。
+所以新增文案键不能只存在于配置文件里：失败分支按"专用键 → 通用键 `login_param_invalid` →
+字面兜底"三层取值，最后一层保证身体永远带理由。分层写成纯静态 `firstNonBlank`，
+另加一条把 i18n 缓存换成空 `Properties` 再走完整失败分支的端到端用例 —— 只测分层函数打不到
+调用点（源码树的 conf 齐全，调用点写回裸读取也照样绿）。
+
+**四、用例与反证**
+
+- 新用例类 `JwtLoginBodyTest`（11 条）：两种请求体形状都能登录、`1` 与 `true` issued 出同一档
+  token、缺键 conf 下响应仍带理由、两档文案在两份语言文件里都存在且不同、成功/失败都不把
+  `rememberMe` 留在线程上（成功出口另有独立契约断言）。`CredentialEntityToStringTest` 跟着字段类型改。
+- 管理端回归 `Tests run: 112, Failures: 0, Errors: 0, Skipped: 0`（101 → 111 → 112，本批 +1 契约用例）。
+- 反证三段式 11 条腿（改坏→点名本次规则→还原逐字节一致并复跑回绿），驱动
+  `tmp/draft/falsify_login_body_b15.py`：L1a–L10 十条打业务规则，L7 打发现层
+  （新用例不登记进门禁名单时门禁自己会响）；汇总 `腿数=11 成立=11 不成立=0`
+  （`tmp/evidence/falsify-login-b15-summary.txt`）。其中两条特意去打"驱动自己"：
+  一条把调用点改回裸 `I18nUtil.getString`、一条把分层判据改成只认非 null。
+  运行期另有三腿对照（出厂 jar/修复 jar × 缺 key conf/齐全 conf，真 HTTP），
+  见 `tmp/evidence/b15-ab-conf-tier.txt`：出厂 jar 给 0 字节、修复 jar + 缺 key conf 给通用文案、
+  修复 jar + 齐全 conf 给专用文案。
+- 收口环境记录（DeepSeek Harness 会话首跑）：`bash` 命中 `C:\Windows\system32\bash.exe` WSL 桩、
+  `python3` 命中 WindowsApps 占位程序（rc=49 零输出）、Git-Bash 直呼时 Docker bin 的无扩展名
+  `docker` shim 因 `env: sh` 不可解析 —— 三条都修在驱动/会话层（find_bash 排除 system32、
+  python3 用真解释器 shim、call() 注入 Git usr/bin PATH），门禁与脚本本体零改动。
+
+**五、③ 能力口径（自动改造原程序代码）本轮没变**
+
+批次14 的措辞继续适用：能生成改写产物、能落库、能重放，**还没有**接进调度的执行链，
+所以对外仍按"离线可用的规则与产物生成"讲，不讲"已自动改造"。
 
 ### 📊 统计（相对上游 v2.1.2 发布点 tag `v-2.1.2`，对账锚点 `67c1004`，实测值）
 

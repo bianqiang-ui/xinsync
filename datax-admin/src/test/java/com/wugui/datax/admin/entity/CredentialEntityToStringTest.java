@@ -56,13 +56,13 @@ public class CredentialEntityToStringTest {
         LoginUser loginUser = new LoginUser();
         loginUser.setUsername("ops_ro");
         loginUser.setPassword(LOGIN_PWD);
-        loginUser.setRememberMe(1);
+        loginUser.setRememberMe(Boolean.TRUE);
 
         String printed = loginUser.toString();
 
         Assert.assertFalse("登录请求体的明文口令不许进 toString：" + printed, printed.contains(LOGIN_PWD));
         Assert.assertTrue("其余字段照常打印：" + printed, printed.contains("username=ops_ro"));
-        Assert.assertTrue("rememberMe 这种排障线索不许一起被排掉：" + printed, printed.contains("rememberMe=1"));
+        Assert.assertTrue("rememberMe 这种排障线索不许一起被排掉：" + printed, printed.contains("rememberMe=true"));
     }
 
     @Test

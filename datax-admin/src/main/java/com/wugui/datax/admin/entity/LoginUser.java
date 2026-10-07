@@ -15,6 +15,17 @@ public class LoginUser {
 
     private String username;
     private String password;
-    private Integer rememberMe;
+
+    /**
+     * "记住我"是一个开关，不是数字。
+     *
+     * 上游声明成 Integer：客户端按 JSON 的惯例传 rememberMe:true 时 Jackson 直接抛
+     * MismatchedInputException，整份请求体读不进来。实测装机包打 POST /api/auth/login，
+     * 传 true/false 得到的是 HTTP 200 + Content-Length: 0（没有 token、没有原因），
+     * 用户侧的表现是"点了登录没反应"。
+     * Boolean 两种写法都接：装机 UI 发的仍是 1/0，由 Jackson 的整数转布尔接住，
+     * 两个形状各有一条回归用例钉着（JwtLoginBodyTest）。
+     */
+    private Boolean rememberMe;
 
 }
